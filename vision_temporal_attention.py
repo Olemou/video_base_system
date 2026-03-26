@@ -1,0 +1,83 @@
+
+import math
+import torch
+import torch.nn as nn
+from rotation_embedding_1d import RotaryEmbedding1D, apply_rotary_1d
+from vision_config import VisionConfig
+class VisionTemporalAttention(nn.Module):
+
+
+    def __init__(self, config: VisionConfig) -> None:
+        super().__init__()
+        self.hidden_dim = config.embed_dim
+        self.head_dim = config.embed_dim // config.num_heads_temporal_attn
+        self.num_heads = max(1, round(config.num_heads_temporal_attn))
+        self.neck_dim = self.num_heads * self.head_dim
+        self.qkv = nn.Linear(self.hidden_dim, self.neck_dim * 3, bias=True)
+        self.proj = nn.Linear(self.neck_dim, self.hidden_dim)
+        self.scaling = self.head_dim **-0.5
+
+        self.RotaryEmbedding1D = RotaryEmbedding1D(self.hidden_dim, self.num_heads)
+
+
+    def _build_block_mask(self, cu_seqlens, seq_len, device):
+        """
+        Block-diagonal mask: tokens attend freely within the same video (all frames),
+        but cannot attend across different videos.
+        """
+        indices = torch.arange(seq_len, device=device)
+        # seq_id[i] = which video token i belongs to
+        seq_id = torch.bucketize(indices, cu_seqlens[1:-1])
+        mask = seq_id.unsqueeze(0) == seq_id.unsqueeze(1)  # True if same video
+        mask = torch.where(mask, 0.0, float("-inf"))       # 0 for allowed, -inf for blocked
+        return mask
+
+    def forward(
+        self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor
+    ) -> torch.Tensor:
+
+        qkv = self.qkv(hidden_states)
+        seq_length = hidden_states.shape[0]
+
+        query_states, key_states, value_states = (
+            qkv.reshape(seq_length, 3, self.num_heads, self.head_dim)
+            .permute(1, 0, 2, 3)
+            .unbind(0)
+        )
+
+        # -------------------
+        # Rotary embeddings
+        # -------------------
+        cos, sin = self.RotaryEmbedding1D(seq_length)
+        query_states, key_states = apply_rotary_1d(
+            query_states, key_states, cos, sin
+        )
+
+        # -------------------
+        # reshape → [1, H, L, D]
+        # -------------------
+        query_states = query_states.transpose(0, 1).unsqueeze(0)
+        key_states   = key_states.transpose(0, 1).unsqueeze(0)
+        value_states = value_states.transpose(0, 1).unsqueeze(0)
+
+        # -------------------
+        # Attention scores
+        # -------------------
+        attn_weights = torch.matmul(query_states, key_states.transpose(-1, -2)) * self.scaling
+        # shape: [1, H, L, L]
+
+        # -------------------
+        # Block mask (replaces splitting)
+        # -------------------
+        attn_mask = self._build_block_mask(cu_seqlens, seq_length, hidden_states.device)
+        attn_mask = attn_mask.unsqueeze(0).unsqueeze(0)  # [1, 1, L, L]
+
+        attn_weights = attn_weights + attn_mask
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_output = torch.matmul(attn_weights, value_states)
+        attn_output = attn_output.transpose(1, 2)
+
+        attn_output = attn_output.reshape(seq_length, -1)
+        attn_output = self.proj(attn_output)
+        return attn_output
