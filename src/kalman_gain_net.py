@@ -1,25 +1,25 @@
 import torch
 import torch.nn as nn
 from spation_attention_2d import SpatialAttention2D
-from cross_attention_2d import CrossAttention2D
+from src.cross_attention_2d import CrossAttention2D
+from vision_config import VisionConfig
 
-class KalmanFormerNet(nn.Module):
-    def __init__(self, dim, num_heads: int = 8, H_patch: int = 7, W_patch: int = 7):
+class kalmanGainNet(nn.Module):
+    def __init__(self, config: VisionConfig, H_patch: int = 7, W_patch: int = 7):
         super().__init__()
-        self.dim = dim
+        self.dim = config.embed_dim
         self.H_patch = H_patch
         self.W_patch = W_patch
 
         # Encoder: self-attention on [innovation, state_evol_diff] (2D)
-        self.encoder = SpatialAttention2D(dim=dim * 2, num_heads=num_heads)
+        self.encoder = SpatialAttention2D(dim=self.dim * 2, num_heads=config.num_heads,isFilter=True)
 
         # Decoder: cross-attention
-        self.decoder = CrossAttention2D(dim=dim, num_heads=num_heads)
+        self.decoder = CrossAttention2D(dim=self.dim, num_heads=config.number_heads_cross_attn)
 
         # Projections
-        self.query_proj = nn.Linear(dim * 2, dim)
-        self.gain_proj = nn.Linear(dim, dim)
-
+        self.query_proj = nn.Linear(self.dim * 2, self.dim)
+        self.gain_proj = nn.Linear(self.dim, self.dim)
     def forward(self, encoder_input, decoder_kv):
         """
         encoder_input: [B, 1, N, 2*D] - [innovation, state_evol_diff]

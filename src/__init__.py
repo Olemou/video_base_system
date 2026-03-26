@@ -1,4 +1,4 @@
-
+from .vision_config import VisionConfig
 from .kalman_former_net import KalmanFormerNet
 from .spation_attention_2d import SpatialAttention2D
 from .vision_temporal_attention import VisionTemporalAttention
