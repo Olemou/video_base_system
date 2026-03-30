@@ -29,22 +29,21 @@ class PatchEmbedding3D(nn.Module):
         """
         video: [B, C, T, H, W]
         returns:
-            x: [B, T_patch, N_frame, C]
+            x: [B*T_patch, N_frame, C]
             T_patch, H_patch, W_patch
         """
         x = self.proj(video)   # [B, C, T', H', W']
-        B, C, T_patch, H_patch, W_patch = x.shape
-
-
         x = x.flatten(3)                # [B, C, T', H'*W']
         x = x.permute(0, 2, 3, 1)       # [B, T', N_frame, C]
-
-        return x, T_patch, H_patch, W_patch
+        B, T_patch, N_frame, C = x.shape
+        x = x.reshape(B * T_patch, N_frame, C)
+    
+        return x
     
     
 
 class PatchMerging(nn.Module):
-    def __init__(self, config: VisionConfig, output_dim=None):
+    def __init__(self, config: VisionConfig, output_dim: int = None):
         """
         Args:
             dim: input channel dimension

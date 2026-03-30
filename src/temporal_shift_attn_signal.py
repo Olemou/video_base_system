@@ -6,6 +6,15 @@ from vision_config import VisionConfig
 
 class temporalShiftedAttentionSignal(nn.Module):
     def __init__(self, config: VisionConfig, qkv_bias=True, use_rotary=True, theta=10000.0):
+        """
+        Args:
+            x: [seq_len, dim] - Input tensor
+            use_rotary: Whether to use rotary positional embeddings
+            theta: Base period for rotary embeddings
+
+        Returns:
+            attn: Attention weights
+        """
         super().__init__()
         self.norm1 = nn.LayerNorm(config.embed_dim)
         self.qkv = nn.Linear(config.embed_dim, config.embed_dim * 3, bias=qkv_bias)
@@ -18,14 +27,17 @@ class temporalShiftedAttentionSignal(nn.Module):
         if use_rotary:
             self.rotary_emb = RotaryEmbedding1D(config.embed_dim, config.number_heads_temporal_attn, theta)
 
-    def forward(self, x, cu_seqlens, patch_len, K, device):
-        """
-        Args:
-            x: [seq_len, dim] - Input tensor
-        Returns:
-            out: [seq_len, dim] - Output tensor
+    def forward(self, x, cu_seqlens, patch_len, number_of_tokens, device):
+        """ args:
+            x: [L, C] where L = B * T_patch * K
+            cu_seqlens: Cumulative sequence lengths for each batch (for masking)
+            patch_len: Length of each temporal patch
+            number_of_tokens: Total number of tokens in the sequence
+            device: Device to run the model on
+        returns:
             attn: Attention weights
         """
+
         L, C = x.shape
 
         # Get rotary embeddings if enabled
@@ -49,7 +61,7 @@ class temporalShiftedAttentionSignal(nn.Module):
         v = v.transpose(0, 1)  # [num_heads, L, head_dim]
 
         attn = (q @ k.transpose(-2, -1))
-        mask = build_kalman_shifted_mask(cu_seqlens, patch_len, K, device)
+        mask = build_kalman_shifted_mask(cu_seqlens, patch_len, number_of_tokens, device)
 
         attn = (attn + mask.unsqueeze(0)) * self.scale  # [num_heads, L, L]
 

@@ -1,11 +1,13 @@
 
 
+from logging import config
+
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
 from kalman_gain_net import kalmanGainNet
 from vision_config import VisionConfig
-from greedy import select_tokens_from_attn
+from greedy import GreedyTokenSelector
 from temporal_shift_attn_signal import temporalShiftedAttentionSignal
 
 def kalman_step(prev_tokens: torch.Tensor, kalmanformer_net: nn.Module):
@@ -13,7 +15,7 @@ def kalman_step(prev_tokens: torch.Tensor, kalmanformer_net: nn.Module):
     prev_tokens: [B, T, N, D]
     kalmanformer_net: KalmanFormerNet instance
     """
-    B, T, N, D = prev_tokens.shape
+    T = prev_tokens.shape[1]
     device, dtype = prev_tokens.device, prev_tokens.dtype
 
     # Output buffers
@@ -58,31 +60,49 @@ def kalman_step(prev_tokens: torch.Tensor, kalmanformer_net: nn.Module):
         curr_vel[:, t] = new_vel
         prev_innovation = innovation
         prev_state_update_diff = state_update_diff  # Store for next iteration
-
-    return x_post_all
+    cu_seqlen = torch.arange(0, (x_post_all.shape[0] + 1) * x_post_all.shape[1] * x_post_all.shape[2], x_post_all.shape[1] * x_post_all.shape[2],
+                          device=device, dtype=torch.int32)
+    return x_post_all, cu_seqlen
 
 class KalmanFormerNet(nn.Module):
-    def __init__(self,cu_seqlens:torch.Tensor, patch_len: int, k: int, batch_size: int, temporal_shift: int, device: torch.device, config: VisionConfig):
+     """_summary_
+        Args:
+            cu_seqlens (torch.Tensor): Cumulative sequence lengths for each batchh
+            number_of_tokens (int): Total number of tokens in the sequence
+            batch_size (int): Batch size
+            device (torch.device): Device to run the model on
+            config (VisionConfig): Configuration object containing model hyperparameters
+        Returns:
+            out: [B, T, N, D] - Updated token representations after KalmanFormer processing
+        """
+     def __init__(self,config: VisionConfig,device:torch.device):
         super().__init__()
+    
         self. kalman_gain_net = kalmanGainNet(config)
         self.temporalShiftedAttentionSignal = temporalShiftedAttentionSignal(config)
-        self.cu_seqlens = cu_seqlens
-        self.patch_len = patch_len
-        self.batch_size = batch_size
-        self.k = k
-        self.temporal_shift = temporal_shift
+        self.greedy_selector = GreedyTokenSelector(config.gready_token_threshold)
+        self.temporal_shift = config.temporal_patch_size
         self.device = device
-    def forward(self, x):
+        self.cu_seqlens = torch.arange(0, (self.batch_size + 1) * self.patch_len * self.number_of_tokens, self.patch_len * self.number_of_tokens,
+                          device=self.device, dtype=torch.int32)
+     def forward(self, x):
+        batch_size = x.shape[0]
+        
+        x = x.view(-1, x.shape[-1])  # [B * T_patch * K, C]
+        
+        number_of_tokens = x.shape[0]
+        patch_len = number_of_tokens //  self.temporal_shift
+        number_of_tokens = number_of_tokens
         attn = self.temporalShiftedAttentionSignal(
             x=x,
             cu_seqlens=self.cu_seqlens,
-            patch_len=self.patch_len,
-            k=self.k,
+            patch_len=patch_len,
+            number_of_tokens=number_of_tokens,
             device = self.device
         )
-        selected_tokens = select_tokens_from_attn(x, attn)
-        select_tokens_from_attn = selected_tokens.reshape(self.batch_size, self.temporal_shift, self.k, -1)
-        return kalman_step(selected_tokens, self.kalman_gain_net)
-         
+        selected_tokens = self.greedy_selector(x, attn)
+        selected_tokens = selected_tokens.reshape(batch_size, self.temporal_shift, selected_tokens.shape[1], -1)
         
-    
+        x_kalman, cu_seqlens = kalman_step(selected_tokens, self.kalman_gain_net)
+        return x_kalman, cu_seqlens
+        

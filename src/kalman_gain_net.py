@@ -5,17 +5,21 @@ from src.cross_attention_2d import CrossAttention2D
 from vision_config import VisionConfig
 
 class kalmanGainNet(nn.Module):
-    def __init__(self, config: VisionConfig, H_patch: int = 7, W_patch: int = 7):
+    """_summary_
+        Args:
+            config (VisionConfig): _description_    
+        returns:
+        K_gain [B, 1, N, D] Kalman gain for each token
+        """
+    def __init__(self, config: VisionConfig):
         super().__init__()
         self.dim = config.embed_dim
-        self.H_patch = H_patch
-        self.W_patch = W_patch
-
+        
         # Encoder: self-attention on [innovation, state_evol_diff] (2D)
-        self.encoder = SpatialAttention2D(dim=self.dim * 2, num_heads=config.num_heads,isFilter=True)
+        self.encoder = SpatialAttention2D(config=config, isFilter=True)
 
         # Decoder: cross-attention
-        self.decoder = CrossAttention2D(dim=self.dim, num_heads=config.number_heads_cross_attn)
+        self.decoder = CrossAttention2D(config=config)
 
         # Projections
         self.query_proj = nn.Linear(self.dim * 2, self.dim)

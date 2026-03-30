@@ -3,9 +3,10 @@ import torch
 import torch.nn.functional as F 
 import torch.nn as nn
 
-def build_kalman_shifted_mask(cu_seqlens: torch.Tensor, patch_len: int, K: int, device: torch.device):
+def build_kalman_shifted_mask(cu_seqlens: torch.Tensor, patch_len: int, number_of_tokens: int, device: torch.device):
         """cu_seqlens: [B+1], patch_len: int,
-        K number of tokens for all videos: int 
+        number_of_tokens: int 
+        path_len is the number of frames in each patch, number_of_tokens is the number of tokens per frame (e.g., 1 for CLS token, or more for multiple tokens per frame)
         Returns:
             mask: [seq_len, seq_len] with -inf for masked positions and 0 for valid positions
         """
@@ -13,7 +14,7 @@ def build_kalman_shifted_mask(cu_seqlens: torch.Tensor, patch_len: int, K: int, 
         seq_len = cu_seqlens[-1].item()
         mask = torch.full((seq_len, seq_len), float('-inf'), device=device)
 
-        frames_per_video = (cu_seqlens[1:] - cu_seqlens[:-1]) // K
+        frames_per_video = (cu_seqlens[1:] - cu_seqlens[:-1]) // number_of_tokens
         total_frames = frames_per_video.sum().item()
         if total_frames <= 1:
             return mask
@@ -45,14 +46,14 @@ def build_kalman_shifted_mask(cu_seqlens: torch.Tensor, patch_len: int, K: int, 
         k_video_id = video_id_for_frame[key_global_frame]
         k_local_frame_id = local_frame_id[key_global_frame]
 
-        q_start = cu_seqlens[q_video_id] + q_local_frame_id * K
-        k_start = cu_seqlens[k_video_id] + k_local_frame_id * K
+        q_start = cu_seqlens[q_video_id] + q_local_frame_id * number_of_tokens
+        k_start = cu_seqlens[k_video_id] + k_local_frame_id * number_of_tokens
 
-        offsets = torch.arange(K, device=device)
+        offsets = torch.arange(number_of_tokens, device=device)
         q_grid = q_start[:, None, None] + offsets[None, :, None]
         k_grid = k_start[:, None, None] + offsets[None, None, :]
-        q_all = q_grid.expand(-1, -1, K).reshape(-1)
-        k_all = k_grid.expand(-1, K, -1).reshape(-1)
+        q_all = q_grid.expand(-1, -1, number_of_tokens).reshape(-1)
+        k_all = k_grid.expand(-1, number_of_tokens, -1).reshape(-1)
         mask[q_all, k_all] = 0.0
 
         # Add self-attention for all tokens

@@ -3,6 +3,37 @@ import torch
 import torch.nn.functional as F
 import torch.nn as nn
 
+class GreedyTokenSelector(nn.Module):
+    def __init__(self, threshold: float=0.01):
+        super().__init__()
+        self.threshold = threshold
+
+    def forward(self, x, attn):
+        """
+        x: [seq_len, dim] - input tokens
+        attn: [num_heads, seq_len, seq_len] - attention weights
+
+        Returns:
+            x_zeroed: [seq_len, dim] - matched tokens kept, unmatched = 0
+            selected_indices: [K] - indices of matched tokens
+        """
+        attn_mean = attn.mean(dim=0)  # [N, N]
+        top1_idx = vectorized_one_to_one(attn_mean.unsqueeze(0), self.threshold).squeeze(0)
+
+        # Which KEYS were selected?
+        valid_queries = top1_idx >= 0
+        selected_keys = top1_idx[valid_queries]  # Unique key indices that were selected
+
+        # Create mask for selected keys
+        key_mask = torch.zeros(x.shape[0], dtype=torch.bool, device=x.device)
+        key_mask[selected_keys] = True
+
+        # Zero-out unselected keys
+        x_zeroed = x.clone()
+        x_zeroed[~key_mask] = 0.0  # ← Unselected become ZERO
+
+        return x_zeroed
+    
 def vectorized_one_to_one(attn_avg: torch.Tensor, threshold: float=0.01):
     head, N, _ = attn_avg.shape
     device = attn_avg.device
@@ -29,15 +60,15 @@ def vectorized_one_to_one(attn_avg: torch.Tensor, threshold: float=0.01):
 
     return top1_idx
 
-def select_tokens_from_attn(x, attn, threshold=0.01):
-    """
+""" def select_tokens_from_attn(x, attn, threshold=0.01):
+    
     x: [seq_len, dim] - input tokens
     attn: [num_heads, seq_len, seq_len] - attention weights
 
     Returns:
         x_zeroed: [seq_len, dim] - matched tokens kept, unmatched = 0
         selected_indices: [K] - indices of matched tokens
-    """
+    
     attn_mean = attn.mean(dim=0)  # [N, N]
     top1_idx = vectorized_one_to_one(attn_mean.unsqueeze(0), threshold).squeeze(0)
 
@@ -53,4 +84,4 @@ def select_tokens_from_attn(x, attn, threshold=0.01):
     x_zeroed = x.clone()
     x_zeroed[~key_mask] = 0.0  # ← Unselected become ZERO
 
-    return x_zeroed
+    return x_zeroed """

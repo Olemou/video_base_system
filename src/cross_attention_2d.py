@@ -16,10 +16,12 @@ class CrossAttention2D(nn.Module):
         self.key_proj = nn.Linear(self.dim, self.dim, bias=qkv_bias)
         self.value_proj = nn.Linear(self.dim, self.dim, bias=qkv_bias)
         self.proj = nn.Linear(self.dim, self.dim)
+        self.h_patch = config.h_patch
+        self.w_patch = config.w_patch
         
         self.rope = RotaryEmbedding2D(self.head_dim)
 
-  def forward(self, query, key, value, H_patch, W_patch):
+  def forward(self, query, key, value):
         B, N, D = query.shape
 
         q = self.query_proj(query)
@@ -30,8 +32,8 @@ class CrossAttention2D(nn.Module):
         k = k.reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
         v = v.reshape(B, N, self.num_heads, self.head_dim).transpose(1, 2)
 
-        ys = torch.arange(H_patch, device=query.device)
-        xs = torch.arange(W_patch, device=query.device)
+        ys = torch.arange(self.h_patch, device=query.device)
+        xs = torch.arange(self.w_patch, device=query.device)
         yy, xx = torch.meshgrid(ys, xs, indexing="ij")
         h_idx, w_idx = yy.reshape(-1), xx.reshape(-1)
 
