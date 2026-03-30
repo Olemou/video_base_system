@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from rotation_embedding_2d import RotaryEmbedding2D, apply_rotary_2d  
-from vision_config import VisionConfig
+from .rotation_embedding_2d import RotaryEmbedding2D, apply_rotary_2d  
+from .vision_config import VisionConfig
   
 class CrossAttention2D(nn.Module):
 
@@ -42,8 +42,7 @@ class CrossAttention2D(nn.Module):
 
         attn = (q @ k.transpose(-2, -1)) * (self.head_dim ** -0.5)
         attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-
+       
         out = attn @ v
         out = out.transpose(1, 2).reshape(B, N, D)
         out = self.proj(out)

@@ -1,5 +1,9 @@
 import torch
 import torch.nn as nn
+import os
+import sys
+# Add parent folder to sys.path so 'src' can be found
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from src import (
     VisionConfig, SpatialAttention2D, VisionTemporalAttention,
     TokenLearner, KalmanFormerNet, PatchMerging,
@@ -8,7 +12,7 @@ from src import (
 
 class AttentionBlock(nn.Module):
     def __init__(self,
-                 config: VisionConfig, device: torch.device, qkv_bias=True, return_attn=False, dropout_prob=0.1):
+                 config: VisionConfig, device: torch.device, qkv_bias=True, return_attn=True, dropout_prob=0.1):
         super().__init__()
         
         self.device = device
@@ -26,7 +30,7 @@ class AttentionBlock(nn.Module):
 
         # Attention and state modules
         self.spatial_attn = SpatialAttention2D(config, qkv_bias=qkv_bias)
-        self.temporal_attn = VisionTemporalAttention(config, qkv_bias=qkv_bias)
+        self.temporal_attn = VisionTemporalAttention(config)
         self.kalmanformerNet = KalmanFormerNet(config, device)
         self.token_learner = TokenLearner(config)
         self.patchmerging = PatchMerging(config)
@@ -43,8 +47,7 @@ class AttentionBlock(nn.Module):
 
     def forward(self, x):
         attn_weights = None
-        B = self.batch_size
-       
+        
         # === Spatial Attention with residual + dropout ===
         x = x + self.dropout(self.spatial_attn(self.norm1(x)))
 
@@ -66,25 +69,26 @@ class AttentionBlock(nn.Module):
         x = self.norm4(x)
 
         # === Token Learner ===
-        x, cu_seqlens = self.token_learner(x)
+        x,cu_seqlens= self.token_learner(x)
         x = self.norm4(x)
-
-        # === Temporal Attention AFTER GRU ===
-        if not self.training and self.return_attn:
-            x_attn, attn_weights = self.temporal_attn(self.norm4(x), cu_seqlens, return_attn=True)
-            x = x + self.dropout(x_attn)
-        else:
-            x = x + self.dropout(self.temporal_attn(self.norm4(x), cu_seqlens, return_attn=False))
-
-        # === Final MLP with residual ===
-        x = self.norm_mlp(x)
-        x = x + self.mlp(x)
-
-        if not self.training and self.return_attn:
-            return x, attn_weights
+        x = x + self.dropout(self.temporal_attn(self.norm4(x), cu_seqlens, return_attn=False))
         return x
 
+class Mlp(nn.Module):
+    def __init__(self, embed_dim: int, spatial_merge_size: int = 2):
+        super().__init__()
+        self.hidden_size = embed_dim * (spatial_merge_size**2)
+        self.ln_q = nn.LayerNorm(embed_dim, eps=1e-6)
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, self.hidden_size),
+            nn.GELU(),
+            nn.Linear(self.hidden_size, embed_dim),
+        )
 
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.mlp(x)
+        return x
+    
 class visionVideoTransformer(nn.Module):
     def __init__(self, config: VisionConfig, device: torch.device,
                  qkv_bias=True, return_attn=False, dropout_prob=0.1):
@@ -94,12 +98,36 @@ class visionVideoTransformer(nn.Module):
                 config = config, device = device,
             qkv_bias=qkv_bias, return_attn=return_attn, dropout_prob=dropout_prob
         )
-        self.number_attn_layer = config.number_attn_layer
+        self.blocks = nn.ModuleList(
+            [AttentionBlock(
+                config = config, device = device,
+            qkv_bias=qkv_bias, return_attn=return_attn, dropout_prob=dropout_prob
+        ) for _ in range(config.depth)]
+        )
+        self.mlp = Mlp(config.embed_dim)
+
 
     def forward(self, video):
         # Patch embedding
         x = self.patch_embedding(video)
         # Attention block
-        for _ in range(self.number_attn_layer):
-            x = self.attention_block(x)
+        for block in self.blocks:
+            x = block(x)
+        x = self.mlp(x)
         return x
+    
+# Choose device
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Instantiate the model
+config = VisionConfig()
+model = visionVideoTransformer(config, device).to(device)
+
+# Optional: test with dummy input
+if __name__ == "__main__":
+    # Example video tensor: [B, C, T, H, W]
+    dummy_video = torch.randn(2, 3, 4, 224, 224).to(device)
+    
+    # Forward pass
+    output = model(dummy_video)
+    print(output.shape)

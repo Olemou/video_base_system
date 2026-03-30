@@ -2,8 +2,8 @@
 import math
 import torch
 import torch.nn as nn
-from rotation_embedding_1d import RotaryEmbedding1D, apply_rotary_1d
-from vision_config import VisionConfig
+from .rotation_embedding_1d import RotaryEmbedding1D, apply_rotary_1d
+from .vision_config import VisionConfig
 class VisionTemporalAttention(nn.Module):
 
 
@@ -36,6 +36,7 @@ class VisionTemporalAttention(nn.Module):
         self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor,
         return_attn: bool = True
     ) -> torch.Tensor:
+        B, T, N, _ = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])  # [B * T_patch * K, C]
 
         qkv = self.qkv(hidden_states)
@@ -82,6 +83,7 @@ class VisionTemporalAttention(nn.Module):
 
         output = weighted_output.reshape(seq_length, -1)
         output = self.proj(output)
+        final_output = output.reshape(B, T, N, output.shape[-1])
         if return_attn:
-            return output, self.attn_weight_output
-        return output
+            return final_output, self.attn_weight_output
+        return final_output

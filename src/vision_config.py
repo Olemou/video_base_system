@@ -9,7 +9,7 @@ class VisionConfig:
                w_patch_after_patch_embedding: int = 14,
                h_patch: int = 7,
                w_patch: int = 7,
-               number_attn_layer = 12
+               depth: int = 12
                ):
         """_summary_
 
@@ -49,5 +49,5 @@ class VisionConfig:
         self.h_patch_after_patch_embedding = h_patch_after_patch_embedding
         self.w_patch_after_patch_embedding = w_patch_after_patch_embedding
         self.embeding_gru = 2 * embed_dim
-        self.number_attn_layer = num_layers
+        self.depth = depth
         

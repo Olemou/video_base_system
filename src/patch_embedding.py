@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from vision_config import VisionConfig
+from .vision_config import VisionConfig
 
 # =========================================================
 # Patch Embedding
@@ -35,9 +35,6 @@ class PatchEmbedding3D(nn.Module):
         x = self.proj(video)   # [B, C, T', H', W']
         x = x.flatten(3)                # [B, C, T', H'*W']
         x = x.permute(0, 2, 3, 1)       # [B, T', N_frame, C]
-        B, T_patch, N_frame, C = x.shape
-        x = x.reshape(B * T_patch, N_frame, C)
-    
         return x
     
     

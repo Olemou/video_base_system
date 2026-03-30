@@ -5,10 +5,6 @@ import torch.nn as nn
 
 class GreedyTokenSelector(nn.Module):
     def __init__(self, threshold: float=0.01):
-        super().__init__()
-        self.threshold = threshold
-
-    def forward(self, x, attn):
         """
         x: [seq_len, dim] - input tokens
         attn: [num_heads, seq_len, seq_len] - attention weights
@@ -17,6 +13,11 @@ class GreedyTokenSelector(nn.Module):
             x_zeroed: [seq_len, dim] - matched tokens kept, unmatched = 0
             selected_indices: [K] - indices of matched tokens
         """
+        super().__init__()
+        self.threshold = threshold
+
+    def forward(self, x, attn):
+    
         attn_mean = attn.mean(dim=0)  # [N, N]
         top1_idx = vectorized_one_to_one(attn_mean.unsqueeze(0), self.threshold).squeeze(0)
 

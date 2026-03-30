@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-from spation_attention_2d import SpatialAttention2D
-from src.cross_attention_2d import CrossAttention2D
-from vision_config import VisionConfig
+from .spation_attention_2d import SpatialAttention2D
+from .cross_attention_2d import CrossAttention2D
+from .vision_config import VisionConfig
 
 class kalmanGainNet(nn.Module):
     """_summary_
@@ -30,6 +30,7 @@ class kalmanGainNet(nn.Module):
         decoder_kv: [B, 1, N, 2*D] - [evolution_diff, state_update_diff]
         """
         B, seq_len, N, _ = encoder_input.shape
+        # [B, 1, N, 2*D] --- IGNORE ---
 
         # Remove sequence dimension
         enc_in = encoder_input[:, 0]  # [B, N, 2D]
@@ -52,4 +53,4 @@ class kalmanGainNet(nn.Module):
         # Final projection
         gain = self.gain_proj(gain)  # [B, N, D]
 
-        return gain.unsqueeze(1)  # [B, 1, N, D]
+        return gain.unsqueeze(1),enc_in  # [B, 1, N, D]

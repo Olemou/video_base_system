@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-from vision_config import VisionConfig
+from .vision_config import VisionConfig
 
 class MlpBlock(nn.Module):
     def __init__(self, config: VisionConfig):
@@ -57,7 +57,8 @@ class TokenLearner(nn.Module):
         probs = F.softmax(scores, dim=-1)   # [B, T, K, N]
 
         tokens = torch.einsum("btkn,btnc->btkc", probs, x)  # [B, T, K, C]
-        cu_seqlen = torch.arange(0, (tokens.shape[0] + 1) * tokens.shape[1] * tokens.shape[2], tokens.shape[1] * tokens.shape[2],
-                          device=x.device, dtype=torch.int32)
+        with torch.no_grad():
+            cu_seqlen = torch.arange(0, (tokens.shape[0] + 1) * tokens.shape[1] * tokens.shape[2], tokens.shape[1] * tokens.shape[2],
+                              device=x.device, dtype=torch.int32)
 
-        return tokens, probs, cu_seqlen
+        return tokens, cu_seqlen

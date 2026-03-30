@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from helper import rotate_half
+from .helper import rotate_half
 
 class RotaryEmbedding1D(nn.Module):
       def __init__(self, dim: int, num_heads: int, theta: float = 10000.0):

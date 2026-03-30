@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from src.vision_config import VisionConfig
+from .vision_config import VisionConfig
 
 class TemporalSpatialStateGRU(nn.Module):
     def __init__(self, config: VisionConfig):

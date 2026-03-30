@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-from rotation_embedding_1d import RotaryEmbedding1D, apply_rotary_1d
-from kalman_shift_mask import build_kalman_shifted_mask
-from vision_config import VisionConfig
+from .rotation_embedding_1d import RotaryEmbedding1D, apply_rotary_1d
+from .kalman_shift_mask import build_kalman_shifted_mask
+from .vision_config import VisionConfig
 
 class temporalShiftedAttentionSignal(nn.Module):
     def __init__(self, config: VisionConfig, qkv_bias=True, use_rotary=True, theta=10000.0):
@@ -19,13 +19,13 @@ class temporalShiftedAttentionSignal(nn.Module):
         self.norm1 = nn.LayerNorm(config.embed_dim)
         self.qkv = nn.Linear(config.embed_dim, config.embed_dim * 3, bias=qkv_bias)
         self.proj = nn.Linear(config.embed_dim, config.embed_dim)
-        self.num_heads = config.number_heads_temporal_attn
-        self.head_dim = config.embed_dim // config.number_heads_temporal_attn
+        self.num_heads = config.num_heads_temporal_attn
+        self.head_dim = config.embed_dim // config.num_heads_temporal_attn
         self.scale = self.head_dim ** -0.5
         # Rotary embeddings
         self.use_rotary = use_rotary
         if use_rotary:
-            self.rotary_emb = RotaryEmbedding1D(config.embed_dim, config.number_heads_temporal_attn, theta)
+            self.rotary_emb = RotaryEmbedding1D(config.embed_dim, config.num_heads_temporal_attn, theta)
 
     def forward(self, x, cu_seqlens, patch_len, number_of_tokens, device):
         """ args:
