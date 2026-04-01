@@ -12,9 +12,7 @@ import numpy as np
 import pandas as pd
 import torch
 import torchvision
-import decord
 from decord import cpu, VideoReader
-
 
 from src.datasets.utils.dataloader import (
     ConcatIndices,
