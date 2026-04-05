@@ -20,6 +20,7 @@ class ResourceStatsSample:
     cpu_times_children_user: float
     cpu_times_children_system: float
     cpu_times_iowait: float
+    resource_stats: str
     cpu_affinity: str
     cpu_num: int
     num_threads: int
@@ -70,7 +71,6 @@ class ResourceMonitoringThread(threading.Thread):
         if not self.p.is_running():
             self.stop()
             return
-
         with self.p.oneshot():
             cpu_percent = self.p.cpu_percent()
             cpu_times = self.p.cpu_times()
@@ -79,6 +79,7 @@ class ResourceMonitoringThread(threading.Thread):
             cpu_num = self.p.cpu_num()
             num_threads = self.p.num_threads()
             num_ctx_switches = self.p.num_ctx_switches()
+            resource_stats = self.p.status()
         timestamp = time.time()
 
         read_count = io_counters.read_count
@@ -146,6 +147,7 @@ class ResourceMonitoringThread(threading.Thread):
             cpu_times_children_system=cpu_times.children_system,
             cpu_times_iowait=cpu_times.iowait,
             cpu_affinity=cpu_affinity,
+            resource_stats = resource_stats,
             cpu_num=cpu_num,
             num_threads=num_threads,
             num_voluntary_ctx_switches=num_ctx_switches.voluntary,
@@ -156,7 +158,6 @@ class ResourceMonitoringThread(threading.Thread):
 
 if __name__ == "__main__":
     import multiprocessing
-
     pid = multiprocessing.current_process().pid
     monitor_thread = ResourceMonitoringThread(pid, 1)
     monitor_thread.start()

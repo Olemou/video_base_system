@@ -39,12 +39,7 @@ class TokenLearner(nn.Module):
         self.num_tokens = config.num_tokens
         self.norm = nn.LayerNorm(config.embed_dim)
 
-        self.mask = nn.Sequential(
-            nn.Linear(config.embed_dim, config.bottleneck_dim),
-            nn.GELU(),
-            nn.Linear(config.bottleneck_dim, config.num_tokens),
-        )
-
+        self.mask = MlpBlock(config)  # [B, T, N, C] -> [B, T, N, K]
     def forward(self, x):
         """
         x: [B, T, N, C]
