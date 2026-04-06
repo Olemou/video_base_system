@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from .vision_config import VisionConfig
+import math
 
 # =========================================================
 # Patch Embedding
@@ -37,42 +38,59 @@ class PatchEmbedding3D(nn.Module):
         x = x.permute(0, 2, 3, 1)       # [B, T', N_frame, C]
         return x
     
-    
+
 
 class PatchMerging(nn.Module):
-    def __init__(self, config: VisionConfig, output_dim: int = None):
-        """
-        Args:
-            dim: input channel dimension
-            output_dim: output channel dimension (default: dim)
-        """
+    def __init__(self, config, output_dim=None):
         super().__init__()
         output_dim = output_dim or config.embed_dim
         self.linear = nn.Linear(4 * config.embed_dim, output_dim)
 
     def forward(self, x):
         """
-        Input:  (B, T, N, C) where N = H * W
-        Output: (B, T, N_new, output_dim) where N_new = (H//2) * (W//2)
+        Input:  (B, T, N, C)
+        Output: (B, T, N_new, output_dim)
         """
         B, T, N, C = x.shape
 
+        # --- Step 1: find closest grid ---
+        H = int(math.sqrt(N))
+        W = math.ceil(N / H)
 
-        H = int(N ** 0.5)
-        W = H
-        assert H * W == N, f"N={N} must be a perfect square"
+        # adjust H again to fit
+        H = math.ceil(N / W)
 
-        # Reshape to spatial grid
+        total = H * W
+        pad_tokens = total - N
+
+        # --- Step 2: pad if needed ---
+        if pad_tokens > 0:
+            pad = torch.zeros(B, T, pad_tokens, C, device=x.device, dtype=x.dtype)
+            x = torch.cat([x, pad], dim=2)
+
+        # --- Step 3: reshape to grid ---
         x = x.view(B, T, H, W, C)
 
-        # Group into 2x2 patches
+        # --- Step 4: ensure even dims for 2x2 ---
+        if H % 2 != 0 or W % 2 != 0:
+            new_H = H + (H % 2)
+            new_W = W + (W % 2)
+
+            pad_h = new_H - H
+            pad_w = new_W - W
+
+            x = F.pad(x, (0, 0, 0, pad_w, 0, pad_h))  # pad H and W
+            H, W = new_H, new_W
+
+        # --- Step 5: 2x2 merging ---
         x = x.view(B, T, H // 2, 2, W // 2, 2, C)
         x = x.permute(0, 1, 2, 4, 3, 5, 6).contiguous()
-
-        # Merge spatial patches
         x = x.view(B, T, H // 2, W // 2, 4 * C)
 
+        # --- Step 6: linear projection ---
         x = self.linear(x)
+
+        # --- Step 7: flatten back ---
         N_new = (H // 2) * (W // 2)
         x = x.view(B, T, N_new, -1)
 

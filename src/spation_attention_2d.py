@@ -51,7 +51,7 @@ class SpatialAttention2D(nn.Module):
 
         attn = (q @ k.transpose(-2, -1)) * (self.head_dim ** -0.5)
         attn = attn.softmax(dim=-1)
-
+        print(f"Attention shape: {attn.shape}")
         out = attn @ v
         out = out.transpose(1, 2).reshape(B*T, N, C)
 

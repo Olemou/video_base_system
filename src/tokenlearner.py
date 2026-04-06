@@ -9,7 +9,7 @@ class MlpBlock(nn.Module):
         if config.mlp_dim is None:
             config.mlp_dim = 4 * config.embed_dim
         self.fc1 = nn.Linear(config.embed_dim, config.mlp_dim)
-        self.fc2 = nn.Linear(config.mlp_dim, config.embed_dim)
+        self.fc2 = nn.Linear(config.mlp_dim, config.num_tokens)
         self.act = nn.GELU()
         if config.dropout and self.training > 0:
             self.dropout = nn.Dropout(config.dropout)
