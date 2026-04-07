@@ -125,6 +125,7 @@ class VideoDataset(torch.utils.data.Dataset):
     def __init__(
         self,
         data_paths,
+        base_path,
         datasets_weights=None,
         frames_per_clip=16,
         fps=None,
@@ -140,6 +141,7 @@ class VideoDataset(torch.utils.data.Dataset):
         duration=None,  # duration in seconds
     ):
         self.data_paths = data_paths
+        self.base_path = base_path
         self.datasets_weights = datasets_weights
         self.frame_step = frame_step
         self.num_clips = num_clips
@@ -185,8 +187,16 @@ class VideoDataset(torch.utils.data.Dataset):
                 except pd.errors.ParserError:
                     # In image captioning datasets where we have space, we use :: as delimiter.
                     data = pd.read_csv(data_path, header=None, delimiter="::")
-                samples += list(data.values[:, 0])
+                # Get raw paths and labels
+                raw_paths = list(data.values[:, 0])
                 labels += list(data.values[:, 1])
+                
+                # ← MODIFIED SECTION: Join with base_path if provided
+                if self.base_path is not None:
+                    samples += [os.path.join(self.base_path, str(path)) for path in raw_paths]
+                else:
+                    samples += raw_paths
+                
                 num_samples = len(data)
                 self.num_samples_per_dataset.append(num_samples)
 
