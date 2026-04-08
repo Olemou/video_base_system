@@ -1,21 +1,20 @@
 #!/bin/bash
-#SBATCH --job-name=multinode_ddp
+#SBATCH --job-name=felix_multinode_ddp
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
-#SBATCH --time=24:00:00
-#SBATCH --nodes=3
-#SBATCH --ntasks-per-node=4          
-#SBATCH --gpus-per-node=4            
-#SBATCH --cpus-per-task=8            
-#SBATCH --mem=64G                    
-#SBATCH --partition=gpu
-#SBATCH --exclusive
+#SBATCH --time=8:00:00
+#SBATCH --nodes=2                   # 2 nodes
+#SBATCH --ntasks-per-node=2         # 2 tasks per node → 1 task per GPU
+#SBATCH --gpus-per-node=h100:2      # 2 full H100 GPUs per node
+#SBATCH --cpus-per-task=8           # CPU cores per task
+#SBATCH --mem=64G
+#SBATCH --partition=gpubase_interac   # adjust to your H100 partition
 
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
 
-PROJECT_DIR="/path/to/your/project"           # CHANGE THIS
+PROJECT_DIR=~/video_base_system            # CHANGE THIS
 VENV_PATH="${PROJECT_DIR}/venv"
 REQUIREMENTS_FILE="${PROJECT_DIR}/requirements.txt"
 VENV_FLAG_FILE="${VENV_PATH}/.setup_complete"
@@ -108,8 +107,8 @@ echo "🔧 Loading modules..."
 echo "=========================================="
 
 # Load required modules
-module load cuda/11.8
-module load python/3.10
+module load cuda/12.6
+module load python/3.12
 
 # Setup and activate virtual environment
 setup_venv
@@ -142,12 +141,18 @@ echo "Virtual Env: $VENV_PATH"
 echo "=========================================="
 
 # Shared paths
-DATA_ROOT="/scratch/shared/imagenet"
-OUTPUT_DIR="/scratch/shared/checkpoints/$SLURM_JOB_ID"
+DATA_ROOT="~/data/video_dataset"  # CHANGE THIS
+CHECKPOINT_DIR="~shared/checkpoints/$SLURM_JOB_ID"
+INTERPRETER_DIR="~shared/interpreter/$SLURM_JOB_ID"
+OUTPUT_DIR="~shared/output/$SLURM_JOB_ID"
 
 # Master node creates directories
 if [ $SLURM_NODEID -eq 0 ]; then
+    mkdir -p $CHECKPOINT_DIR
+    mkdir -p $INTERPRETER_DIR
     mkdir -p $OUTPUT_DIR
+    echo "📁 Master node created: $CHECKPOINT_DIR"
+    echo "📁 Master node created: $INTERPRETER_DIR"
     echo "📁 Master node created: $OUTPUT_DIR"
 fi
 sleep 5
@@ -172,7 +177,9 @@ torchrun \
     --is_distributed \
     --data_root $DATA_ROOT \
     --output_dir $OUTPUT_DIR \
-    --batch_size 32 \
+    --checkpoint_dir $CHECKPOINT_DIR \
+    --interpreter_dir $INTERPRETER_DIR \
+    --batch_size 512 \
     --num_epochs 100
 EOF
 
