@@ -141,7 +141,7 @@ echo "Virtual Env: $VENV_PATH"
 echo "=========================================="
 
 # Shared paths
-DATA_ROOT="~/data/video_dataset"  # CHANGE THIS
+DATA_ROOT="~/data"  # CHANGE THIS
 CHECKPOINT_DIR="~shared/checkpoints/$SLURM_JOB_ID"
 INTERPRETER_DIR="~shared/interpreter/$SLURM_JOB_ID"
 OUTPUT_DIR="~shared/output/$SLURM_JOB_ID"
