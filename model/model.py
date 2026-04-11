@@ -114,7 +114,9 @@ class visionVideoTransformer(nn.Module):
         for block in self.blocks:
             x = block(x)
         x = self.mlp(x)
-        return x
+        weights = torch.softmax(x.mean(dim=-1).mean(dim=-1), dim=1)  # [B, T]
+        z_t = torch.einsum('btnd,bt->bnd', x, weights)          # [B, N, D]
+        return z_t
     
 # Choose device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

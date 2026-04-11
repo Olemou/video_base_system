@@ -50,8 +50,7 @@ class SpatialAttention2D(nn.Module):
         q, k = apply_rotary_2d(q, k, cos, sin)
 
         attn = (q @ k.transpose(-2, -1)) * (self.head_dim ** -0.5)
-        attn = attn.softmax(dim=-1)
-        print(f"Attention shape: {attn.shape}")
+        attn = attn.softmax(dim=-1) 
         out = attn @ v
         out = out.transpose(1, 2).reshape(B*T, N, C)
 
