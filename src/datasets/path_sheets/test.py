@@ -67,3 +67,20 @@ def get_path_sheets(config: dict):
     paths = extract_paths(ps_cfg, root)
 
     return paths
+
+
+# -----------------------------
+# MAIN
+# -----------------------------
+if __name__ == "__main__":
+
+    config = load_config("~/Documents/video_base_system/config/datasets.yaml")
+
+    dataset_paths = get_dataset_paths(config, ["thermal"])
+    path_sheets = get_path_sheets(config)
+
+    print("\nFinal dataset paths:")
+    print({k: [str(p) for p in v] for k, v in dataset_paths.items()})
+
+    print("\nFinal path sheets:")
+    print([str(p) for p in path_sheets])

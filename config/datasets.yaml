@@ -1,0 +1,11 @@
+data_root: ~/datasets
+
+path_sheets:
+  - path_sheets
+
+datasets:
+  thermal:
+    img_dirs:
+      - folder1
+      - folder2
+      - folder3
