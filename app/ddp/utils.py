@@ -15,6 +15,9 @@ from torch.utils.data.distributed import DistributedSampler
 from torchvision import datasets, transforms, models
 import numpy as np
 import random
+from src.src_utils.logging import get_logger
+
+logger = get_logger("DDP Training", log_dir="~/log", log_file="ddp_training.txt")
 
 # =============================================================================
 # ENVIRONMENT SETUP
@@ -79,7 +82,7 @@ def parse_arguments():
                         help="Master node port")
     
     # Training hyperparameters
-    parser.add_argument("--batch_size", type=int, default=32,
+    parser.add_argument("--batch_size", type=int, default=512,
                         help="Batch size per GPU")
     parser.add_argument("--num_epochs", type=int, default=100,
                         help="Number of training epochs")
@@ -87,21 +90,22 @@ def parse_arguments():
                         help="Learning rate")
     parser.add_argument("--weight_decay", type=float, default=1e-4,
                         help="Weight decay")
-    parser.add_argument("--num_workers", type=int, default=4,
+    parser.add_argument("--num_workers", type=int, default=8,
                         help="Data loading workers per GPU")
     
     # Model and data
-    parser.add_argument("--model", type=str, default="resnet50",
-                        choices=["resnet18", "resnet50", "resnet101"],
-                        help="Model architecture")
-    parser.add_argument("--dataset", type=str, default="cifar10",
-                        choices=["cifar10", "cifar100", "imagenet"],
-                        help="Dataset to use")
-    parser.add_argument("--data_root", type=str, default="/shared/data",
+    
+    parser.add_argument("--data_root", type=str, default="~/data",
                         help="Root directory for dataset (must be accessible from all nodes)")
-    parser.add_argument("--output_dir", type=str, default="/shared/checkpoints",
+    
+    parser.add_argument("--output_dir", type=str,
                         help="Output directory for checkpoints (shared across nodes)")
     
+    parser.add_argument("--checkpoint_dir", type=str,
+                        help="Directory for saving checkpoints (shared across nodes)")
+    parser.add_argument("--interpreter_dir", type=str,
+                        help="Directory for saving interpreter logs (shared across nodes)")
+
     # Checkpointing and logging
     parser.add_argument("--checkpoint_freq", type=int, default=5,
                         help="Save checkpoint every N epochs")
@@ -168,9 +172,10 @@ def init_distributed_mode(args):
             timeout=timeout
         )
     except Exception as e:
-        print(f"❌ Failed to initialize process group: {e}")
-        print(f"   Master: {args.master_addr}:{args.master_port}")
-        print(f"   Rank: {args.rank}/{args.world_size}")
+        logger.info(30*"=")
+        logger.error(f"Failed to initialize process group: {e}")
+        logger.error(f"Master: {args.master_addr}:{args.master_port}")
+        logger.error(f"Rank: {args.rank}/{args.world_size}")
         sys.exit(1)
     
     # Synchronize all processes
@@ -178,21 +183,21 @@ def init_distributed_mode(args):
     
     # Verify all processes are connected
     if args.rank == 0:
-        print("\n" + "="*80)
-        print("🌐 MULTI-NODE DISTRIBUTED TRAINING INITIALIZED")
-        print("="*80)
-        print(f"Total Nodes: {args.nnodes}")
-        print(f"GPUs per Node: {args.nproc_per_node}")
-        print(f"Total Processes: {args.world_size}")
-        print(f"Global Batch Size: {args.global_batch_size}")
-        print(f"Master Address: {args.master_addr}:{args.master_port}")
-        print(f"Backend: nccl")
-        print("="*80 + "\n")
+        logger.info("\n" + "="*80)
+        logger.info("🌐 MULTI-NODE DISTRIBUTED TRAINING INITIALIZED")
+        logger.info("="*80)
+        logger.info(f"Total Nodes: {args.nnodes}")
+        logger.info(f"GPUs per Node: {args.nproc_per_node}")
+        logger.info(f"Total Processes: {args.world_size}")
+        logger.info(f"Global Batch Size: {args.global_batch_size}")
+        logger.info(f"Master Address: {args.master_addr}:{args.master_port}")
+        logger.info(f"Backend: nccl")
+        logger.info("="*80 + "\n")
     
     # FIX: Proper node identification
-    print(f"📍 Node {args.node_rank} | Host: {socket.gethostname()} | "
-          f"Rank: {args.rank}/{args.world_size} | GPU: {args.local_rank} | "
-          f"PID: {os.getpid()}")
+    logger.info(f"📍 Node {args.node_rank} | Host: {socket.gethostname()} | "
+                f"Rank: {args.rank}/{args.world_size} | GPU: {args.local_rank} | "
+                f"PID: {os.getpid()}")
     
     # FIX: Add tensor synchronization test to verify multi-node communication
     if args.rank == 0:
@@ -206,9 +211,10 @@ def init_distributed_mode(args):
         expected_sum = args.world_size
         actual_sum = test_tensor.item()
         if abs(actual_sum - expected_sum) < 0.001:
-            print(f"✅ Multi-node communication test passed (sum={actual_sum})")
+            logger.info(f"✅ Multi-node communication test passed (sum={actual_sum})")
+            logger.info(30*"=" + "\n")
         else:
-            print(f"⚠️ Communication test: expected {expected_sum}, got {actual_sum}")
+            logger.warning(f"⚠️ Communication test: expected {expected_sum}, got {actual_sum}")
     
     dist.barrier()
     
@@ -221,8 +227,9 @@ def cleanup_distributed():
         # FIX: Add barrier before cleanup
         dist.barrier()
         dist.destroy_process_group()
-        print(f"🧹 Rank {os.environ.get('RANK', 0)}: Distributed cleanup complete")
-
+        logger.info(f"🧹 Rank {os.environ.get('RANK', 0)}: Distributed cleanup complete")
+        logger.info(30*"=" + "\n")
+      
 
 # =============================================================================
 # UTILITY FUNCTIONS FOR MULTI-NODE
@@ -273,8 +280,7 @@ def main():
     if args.distributed:
         synchronize()
         if is_main_process():
-            print(f"✅ All {args.world_size} processes synchronized across {args.nnodes} nodes")
-    
+            logger.info(f"✅ All {args.world_size} processes synchronized across {args.nnodes} nodes")
     # Your training code here...
     print(f"Process {args.rank} ready for training")
     
