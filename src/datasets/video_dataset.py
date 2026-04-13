@@ -8,6 +8,9 @@ import pathlib
 import warnings
 from logging import getLogger
 
+from numpy.strings import index
+from src.datasets.augmentation.motion import MotionAugmentation
+
 import numpy as np
 import pandas as pd
 import torch
@@ -83,12 +86,8 @@ def make_videodataset(
         )
 
     logger.info("VideoDataset dataset created")
-    if datasets_weights is not None:
-        dist_sampler = DistributedWeightedSampler(
-            dataset, num_replicas=world_size, rank=rank, shuffle=True
-        )
-    else:
-        dist_sampler = torch.utils.data.distributed.DistributedSampler(
+    
+    dist_sampler = torch.utils.data.distributed.DistributedSampler(
             dataset, num_replicas=world_size, rank=rank, shuffle=True
         )
 
@@ -116,7 +115,7 @@ def make_videodataset(
         )
     logger.info("VideoDataset unsupervised data loader created")
 
-    return dataset, data_loader, dist_sampler
+    return data_loader
 
 
 class VideoDataset(torch.utils.data.Dataset):
@@ -130,6 +129,9 @@ class VideoDataset(torch.utils.data.Dataset):
         frames_per_clip=16,
         fps=None,
         dataset_fpcs=None,
+        use_motion_augmentation=True   ,
+         motion_type='mixed', 
+         motion_intensity='medium',
         frame_step=4,
         num_clips=1,
         transform=None,
@@ -145,6 +147,9 @@ class VideoDataset(torch.utils.data.Dataset):
         self.datasets_weights = datasets_weights
         self.frame_step = frame_step
         self.num_clips = num_clips
+        self.use_motion_augmentation = use_motion_augmentation
+        self.motion_type = motion_type
+        self.motion_intensity = motion_intensity
         self.transform = transform
         self.shared_transform = shared_transform
         self.random_clip_sampling = random_clip_sampling
@@ -174,6 +179,14 @@ class VideoDataset(torch.utils.data.Dataset):
         if VideoReader is None:
             raise ImportError(
                 'Unable to import "decord" which is required to read videos.'
+            )
+        if use_motion_augmentation:
+            # Get fpc from first dataset (assuming all have same fpc)
+            fpc = dataset_fpcs[0] if dataset_fpcs else 16
+            self.motion_aug = MotionAugmentation(
+                fpc=fpc,
+                motion_type=self.motion_type,
+                motion_intensity=self.motion_intensity
             )
 
         # Load video paths and labels
@@ -287,6 +300,10 @@ class VideoDataset(torch.utils.data.Dataset):
         # Expanding the input image [3, H, W] ==> [T, 3, H, W]
         buffer = image_tensor.unsqueeze(dim=0).repeat((fpc, 1, 1, 1))
         buffer = buffer.permute((0, 2, 3, 1))  # [T, 3, H, W] ==> [T H W 3]
+        
+        
+        # Apply motion to create fake video clip
+        buffer = self.motion_aug.apply_motion(buffer, clip_index=index)
 
         if self.shared_transform is not None:
             # Technically we can have only transform, doing this just for the sake of consistency with videos.

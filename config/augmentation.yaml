@@ -1,0 +1,24 @@
+thermal_augmentation:
+  image_size: 224
+  
+  thermal_erase:
+    mask_width_ratio: 0.6
+    mask_height_ratio: 0.2
+    max_attempts: 5
+    center_region: [0.3, 0.7]  # [start_ratio, end_ratio] for both x and y
+    debug: false
+  
+  brightness_contrast:
+    brightness_range: [0.8, 1.4]
+    contrast_range: [0.2, 1.2]
+  
+  thermal_contrast:
+    alpha_min: 0.5
+    alpha_max: 1.0
+    alpha_shift: 1.0  # Used when alpha is provided: range = [alpha, 1+alpha]
+  
+  elastic_transform:
+    alpha_ratio: 0.08  # alpha = image_size * alpha_ratio
+    sigma_ratio: 0.08  # sigma = image_size * sigma_ratio
+    order: 1
+    mode: "reflect"

@@ -9,7 +9,7 @@ def init_data(
     batch_size,
     transform=None,
     shared_transform=None,
-    data="ImageNet",
+    data="videodataset",
     collator=None,
     pin_mem=True,
     num_workers=8,
@@ -37,7 +37,7 @@ def init_data(
     if data.lower() == "imagenet":
         from src.datasets.imagenet1k import make_imagenet1k
 
-        dataset, data_loader, dist_sampler = make_imagenet1k(
+        data_loader = make_imagenet1k(
             transform=transform,
             batch_size=batch_size,
             collator=collator,
@@ -55,7 +55,7 @@ def init_data(
     elif data.lower() == "videodataset":
         from src.datasets.video_dataset import make_videodataset
 
-        dataset, data_loader, dist_sampler = make_videodataset(
+        data_loader = make_videodataset(
             data_paths=root_path,
             batch_size=batch_size,
             frames_per_clip=clip_len,
@@ -81,4 +81,4 @@ def init_data(
             log_dir=log_dir,
         )
 
-    return (data_loader, dist_sampler)
+    return data_loader
