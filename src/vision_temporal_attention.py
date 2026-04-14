@@ -34,7 +34,7 @@ class VisionTemporalAttention(nn.Module):
 
     def forward(
         self, hidden_states: torch.Tensor, cu_seqlens: torch.Tensor,
-        return_attn: bool = True
+                   
     ) -> torch.Tensor:
         B, T, N, _ = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])  # [B * T_patch * K, C]
@@ -84,6 +84,4 @@ class VisionTemporalAttention(nn.Module):
         output = weighted_output.reshape(seq_length, -1)
         output = self.proj(output)
         final_output = output.reshape(B, T, N, output.shape[-1])
-        if return_attn:
-            return final_output, self.attn_weight_output
         return final_output
