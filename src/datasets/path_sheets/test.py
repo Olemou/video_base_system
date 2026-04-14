@@ -1,86 +1,76 @@
+import os
+import csv
+import glob
 from pathlib import Path
-import yaml
 
 
-# -----------------------------
-# Load config
-# -----------------------------
-def load_config(config_path: str) -> dict:
-    path = Path(config_path).expanduser().resolve()
+def rename_and_create_csv(
+    image_folder,
+    output_csv="images.csv",
+    prefix="no_spill",
+    excelfileName="datasets/folderImage1/no_spill"
+):
+    image_folder = Path(image_folder)
 
-    if not path.exists():
-        raise FileNotFoundError(f"Config not found: {path}")
+    # Get all images
+    image_extensions = ["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.tiff"]
 
-    with open(path, "r") as f:
-        return yaml.safe_load(f)
+    images = []
+    for ext in image_extensions:
+        images.extend(image_folder.glob(ext))
 
+    images = sorted(images)
 
-# -----------------------------
-# Extract paths (RETURN Path objects)
-# -----------------------------
-def extract_paths(obj, root: Path):
-    paths = []
+    if not images:
+        print(f"No images found in {image_folder}")
+        return
 
-    if isinstance(obj, dict):
-        for v in obj.values():
-            paths.extend(extract_paths(v, root))
+    print(f"Found {len(images)} images")
 
-    elif isinstance(obj, list):
-        for v in obj:
-            paths.extend(extract_paths(v, root))
+    csv_data = []
 
-    elif isinstance(obj, str):
-        paths.append((root / obj).resolve()) 
+    for idx, old_path in enumerate(images, start=1):
+        ext = old_path.suffix.lower()
 
-    return paths
+        # ✅ SAFE filename (no path inside name)
+        new_filename = f"{prefix}_{idx:06d}{ext}"
+        print(f"Processing: {old_path.name} -> {new_filename}")
+        new_path = image_folder / new_filename
 
+        # ✅ FIX: avoid FileExistsError
+        if new_path.exists():
+            os.remove(new_path)
 
-# -----------------------------
-# Dataset loader
-# -----------------------------
-def get_dataset_paths(config: dict, dataset_names: list[str]) -> dict:
-    root = Path(config.get("data_root", "")).expanduser().resolve()
+        # rename safely
+        os.replace(old_path, new_path)
 
-    all_paths = {}
+        print(f"Renamed: {old_path.name} -> {new_filename}")
 
-    for name in dataset_names:
-        dataset_cfg = config.get("datasets", {}).get(name)
+        # label logic
+        label = 0 if "no_spill" in new_filename else 1
+        
+        excel = f"{excelfileName}_{idx:06d}{ext}"
+        csv_data.append([str(excel), label])
 
-        if dataset_cfg is None:
-            raise ValueError(f"Unknown dataset: {name}")
+    # write CSV
+    with open(output_csv, "w", newline="") as f:
+        writer = csv.writer(f, delimiter=" ")
+        writer.writerows(csv_data)
 
-        paths = extract_paths(dataset_cfg, root)
+    print(f"\n✅ CSV file created: {output_csv}")
+    print(f"Total samples: {len(csv_data)}")
 
-        all_paths[name] = paths
-
-    return all_paths
-
-
-# -----------------------------
-# Path sheets
-# -----------------------------
-def get_path_sheets(config: dict):
-    root = Path(config.get("data_root", "")).expanduser().resolve()
-
-    ps_cfg = config.get("path_sheets", [])
-
-    paths = extract_paths(ps_cfg, root)
-
-    return paths
+    print("\nFirst 5 entries:")
+    for i in range(min(5, len(csv_data))):
+        print(f"  {csv_data[i][0]} {csv_data[i][1]}")
 
 
-# -----------------------------
-# MAIN
-# -----------------------------
+# Usage
 if __name__ == "__main__":
+    path = r"C:\Users\efo6780\Documents\data"
 
-    config = load_config("~/Documents/video_base_system/config/datasets.yaml")
-
-    dataset_paths = get_dataset_paths(config, ["thermal"])
-    path_sheets = get_path_sheets(config)
-
-    print("\nFinal dataset paths:")
-    print({k: [str(p) for p in v] for k, v in dataset_paths.items()})
-
-    print("\nFinal path sheets:")
-    print([str(p) for p in path_sheets])
+    rename_and_create_csv(
+        image_folder=path,
+        output_csv="images.csv",
+        prefix="no_spill"
+    )

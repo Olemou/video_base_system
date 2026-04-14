@@ -4,6 +4,7 @@ tensorboard
 wandb
 iopath
 pyyaml
+kornia
 numpy
 opencv-python
 submitit

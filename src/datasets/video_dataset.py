@@ -10,7 +10,7 @@ from logging import getLogger
 
 from numpy.strings import index
 from src.datasets.augmentation.motion import MotionAugmentation
-
+from src.datasets.augmentation.thermal_aug import ThermalAugmentation
 import numpy as np
 import pandas as pd
 import torch
@@ -20,15 +20,10 @@ from decord import cpu, VideoReader
 from src.datasets.utils.dataloader import (
     ConcatIndices,
     MonitoredDataset,
-    NondeterministicDataLoader,
 )
-
-
-from src.datasets.utils.weighted_sampler import DistributedWeightedSampler
 
 _GLOBAL_SEED = 0
 logger = getLogger()
-
 
 def make_videodataset(
     data_paths,
@@ -43,8 +38,8 @@ def make_videodataset(
     allow_clip_overlap=False,
     filter_short_videos=False,
     filter_long_videos=int(10**9),
-    transform=None,
-    shared_transform=None,
+    transform=True,
+    shared_transform=True,
     rank=0,
     world_size=1,
     datasets_weights=None,
@@ -53,7 +48,6 @@ def make_videodataset(
     num_workers=10,
     pin_mem=True,
     persistent_workers=True,
-    deterministic=True,
     log_dir=None,
 ):
     dataset = VideoDataset(
@@ -91,19 +85,7 @@ def make_videodataset(
             dataset, num_replicas=world_size, rank=rank, shuffle=True
         )
 
-    if deterministic:
-        data_loader = torch.utils.data.DataLoader(
-            dataset,
-            collate_fn=collator,
-            sampler=dist_sampler,
-            batch_size=batch_size,
-            drop_last=drop_last,
-            pin_memory=pin_mem,
-            num_workers=num_workers,
-            persistent_workers=(num_workers > 0) and persistent_workers,
-        )
-    else:
-        data_loader = NondeterministicDataLoader(
+    data_loader = torch.utils.data.DataLoader(
             dataset,
             collate_fn=collator,
             sampler=dist_sampler,
@@ -134,8 +116,8 @@ class VideoDataset(torch.utils.data.Dataset):
          motion_intensity='medium',
         frame_step=4,
         num_clips=1,
-        transform=None,
-        shared_transform=None,
+        transform: bool = True,
+        shared_transform:bool = True,
         random_clip_sampling=True,
         allow_clip_overlap=False,
         filter_short_videos=False,
@@ -158,7 +140,7 @@ class VideoDataset(torch.utils.data.Dataset):
         self.filter_long_videos = filter_long_videos
         self.duration = duration
         self.fps = fps
-
+        self._thermal_aug = ThermalAugmentation()
         if sum([v is not None for v in (fps, duration, frame_step)]) != 1:
             raise ValueError(
                 f"Must specify exactly one of either {fps=}, {duration=}, or {frame_step=}."
@@ -186,7 +168,8 @@ class VideoDataset(torch.utils.data.Dataset):
             self.motion_aug = MotionAugmentation(
                 fpc=fpc,
                 motion_type=self.motion_type,
-                motion_intensity=self.motion_intensity
+                motion_intensity=self.motion_intensity,
+                seed=_GLOBAL_SEED,
             )
 
         # Load video paths and labels
@@ -275,11 +258,9 @@ class VideoDataset(torch.utils.data.Dataset):
             return [video[i * fpc : (i + 1) * fpc] for i in range(nc)]
 
         # Parse video into frames & apply data augmentations
-        if self.shared_transform is not None:
-            buffer = self.shared_transform(buffer)
+        if self.shared_transform:
+            buffer = self._thermal_aug(buffer=buffer, is_shared=False)
         buffer = split_into_clips(buffer)
-        if self.transform is not None:
-            buffer = [self.transform(clip) for clip in buffer]
 
         return buffer, label, clip_indices
 
@@ -304,13 +285,8 @@ class VideoDataset(torch.utils.data.Dataset):
         
         # Apply motion to create fake video clip
         buffer = self.motion_aug.apply_motion(buffer, clip_index=index)
-
-        if self.shared_transform is not None:
-            # Technically we can have only transform, doing this just for the sake of consistency with videos.
-            buffer = self.shared_transform(buffer)
-
-        if self.transform is not None:
-            buffer = [self.transform(buffer)]
+        if self.transform:
+            buffer = [self._thermal_aug(buffer=buffer, is_shared=False)]
 
         return buffer, label, clip_indices
 

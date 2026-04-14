@@ -1,6 +1,7 @@
 from pathlib import Path
 import yaml
 
+from typing import List
 
 # -----------------------------
 # Load config
@@ -13,7 +14,6 @@ def load_config(config_path: str) -> dict:
 
     with open(path, "r") as f:
         return yaml.safe_load(f)
-
 
 # -----------------------------
 # Extract paths (RETURN Path objects)
@@ -59,12 +59,43 @@ def get_dataset_paths(config: dict, dataset_names: list[str]) -> dict:
 # -----------------------------
 # Path sheets
 # -----------------------------
-def get_path_sheets(config: dict):
+def get_excel_files(folder: Path) -> List[Path]:
+    folder = Path(folder)
+    print(f"Looking for Excel files in: {folder}")
+    if not folder.exists():
+        return []
+
+    return list(folder.glob("*.xlsx")) + list(folder.glob("*.csv"))  
+
+def get_path_sheets(config: dict) -> List[Path]:
     root = Path(config.get("data_root", "")).expanduser().resolve()
+    paths = extract_paths(config.get("path_sheets", []), root)
 
-    ps_cfg = config.get("path_sheets", [])
+    return [
+        f
+        for folder in paths
+        for f in get_excel_files(folder)
+    ]
+    
+def get_all_sheets():
+    BASE_DIR = Path(__file__).resolve().parents[3]
+    path = BASE_DIR / "config" / "dataset_config.yaml"
+    config = load_config(path)
+    paths = get_path_sheets(config)
+    return [str(p) for p in paths]
 
-    paths = extract_paths(ps_cfg, root)
+def get_base_path() -> Path:
+    BASE_DIR = Path(__file__).resolve().parents[3]
+    path = BASE_DIR / "config" / "dataset_config.yaml"
+    config = load_config(path)
+    return Path(config.get("data_root", "")).expanduser().resolve()
 
-    return paths
+if __name__ == "__main__":
+    sheets = get_all_sheets()
+    print("Path sheets found:")
+    for sheet in sheets:
+        print(f" - {sheet}")
+    root = get_base_path()
+    print(f"Base path: {root}")
+
 

@@ -1,0 +1,13 @@
+data_root: ~/Documents/video_base_system/src/datasets
+
+path_sheets:
+  - path_sheets
+datasets:
+  img_dirs:
+        - folderImage1
+        - folderImage2
+        - folderImage3
+  video_dirs:
+        - folderVideo1
+        - folderVideo2
+        - folderVideo3
