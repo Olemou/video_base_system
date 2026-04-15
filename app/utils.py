@@ -44,3 +44,40 @@ class DataIterator:
                     raise RuntimeError(
                         f"Failed loading data after {self.max_retries} retries"
                     ) from e
+                    
+                    
+def set_lr_para(
+    lr0: float = 0.003,            # base LR from paper
+    B0: int = 4096,               # original global batch size from paper
+    B_global: int = 512 * 4,         # your current global batch size
+):
+    """
+    Define parameter groups for optimizer with separate weight decays
+    for head, early, mid, and late transformer blocks, but same learning rate
+    scaled according to global batch size.
+
+    Args:
+        lr0 (float): base learning rate in the original paper
+        B0 (int): original global batch size in the paper
+        B_global (int): your current global batch size
+
+    Returns:
+        dict: dictionary containing hyperparameters
+    """
+
+    # Scale learning rate linearly based on global batch
+    lr_scaled = lr0 * B_global / B0
+
+    OPTIMIZER_PARAMS = {
+        "lr_head": 1.5*lr_scaled,
+        "lr_early": lr_scaled,
+        "lr_mid": lr_scaled,
+        "lr_late": lr_scaled,
+        "weight_decay_head": 0.05,
+        "weight_decay_early": 0.03,
+        "weight_decay_mid": 0.03,
+        "weight_decay_late": 0.03,
+    }
+
+    return OPTIMIZER_PARAMS
+    
