@@ -143,7 +143,7 @@ echo "=========================================="
 # Shared paths
 DATA_ROOT="~/data"  # CHANGE THIS
 CHECKPOINT_DIR="~shared/checkpoints/$SLURM_JOB_ID"
-INTERPRETER_DIR="~shared/interpreter/$SLURM_JOB_ID"
+INTERPRETER_DIR="~shared/logfiles/$SLURM_JOB_ID"
 OUTPUT_DIR="~shared/output/$SLURM_JOB_ID"
 
 # Master node creates directories

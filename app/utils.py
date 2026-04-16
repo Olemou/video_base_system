@@ -1,6 +1,7 @@
 import time
 import torch
 import logging
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +23,11 @@ class DataIterator:
 
     def next(self, epoch):
         iter_retries = 0
-
-        while True:
+        iter_successful = False
+        while not iter_successful:
             try:
                 sample = next(self.loader)
+                iter_successful = True
                 return sample
 
             except StopIteration:
@@ -80,4 +82,62 @@ def set_lr_para(
     }
 
     return OPTIMIZER_PARAMS
+
+
+def create_optimizer(model, params: dict):
+    param_groups = [
+        {
+            "params": model.head.parameters(),
+            "lr": params["lr_head"],
+            "weight_decay": params["weight_decay_head"],
+            "initial_lr": params["lr_head"],  # important for cosine schedule
+        },
+    ]
+
+    num_layers = len(model.transformer.layers)
+    early_idx = list(range(0, int(0.4 * num_layers)))
+    mid_idx   = list(range(int(0.4 * num_layers), int(0.7 * num_layers)))
+    late_idx  = list(range(int(0.7 * num_layers), num_layers))
+
+# Add transformer blocks as separate param groups
+    param_groups += [
+        {
+            "params": [p for i, layer in enumerate(model.transformer.layers) if i in early_idx for p in layer.parameters()],
+            "lr": params["lr_early"],
+            "weight_decay": params["weight_decay_early"],
+            "initial_lr": params["lr_early"],
+        },
+        {
+            "params": [p for i, layer in enumerate(model.transformer.layers) if i in mid_idx for p in layer.parameters()],
+            "lr": params["lr_mid"],
+            "weight_decay": params["weight_decay_mid"],
+            "initial_lr": params["lr_mid"],
+        },
+        {
+            "params": [p for i, layer in enumerate(model.transformer.layers) if i in late_idx for p in layer.parameters()],
+            "lr": params["lr_late"],
+            "weight_decay": params["weight_decay_late"],
+            "initial_lr": params["lr_late"],
+        },
+    ]
+    optimizer = torch.optim.AdamW(param_groups)
+    return optimizer
+
+# --- Cosine decay + quadratic warmup schedule ---
+def cosine_schedule(epoch, optimizer, warmup_epochs, max_epochs, min_lr=1e-6):
+    """
+    Quadratic warmup + cosine decay per param group.
+    """
+    for pg in optimizer.param_groups:
+        base_lr = pg["initial_lr"]  # use the initial LR for each block
+        if epoch < warmup_epochs:
+            lr = min_lr + (base_lr - min_lr) * (epoch / warmup_epochs) ** 2
+        else:
+            progress = (epoch - warmup_epochs) / (max_epochs - warmup_epochs)
+            lr = min_lr + 0.5 * (base_lr - min_lr) * (1 + np.cos(np.pi * progress))
+        pg["lr"] = lr
+    return [pg["lr"] for pg in optimizer.param_groups]
+
+
+
     

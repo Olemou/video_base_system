@@ -86,13 +86,23 @@ def parse_arguments():
                         help="Batch size per GPU")
     parser.add_argument("--num_epochs", type=int, default=100,
                         help="Number of training epochs")
-    parser.add_argument("--learning_rate", type=float, default=0.001,
+    parser.add_argument("--learning_rate", type=float, default=1e-3,
                         help="Learning rate")
     parser.add_argument("--weight_decay", type=float, default=1e-4,
                         help="Weight decay")
     parser.add_argument("--num_workers", type=int, default=8,
                         help="Data loading workers per GPU")
-    
+    parser.add_argument("--which_dtype", type=str, default="float32",
+                        help="Data type for training")
+    parser.add_argument("--loss_reg_std_mult", type=float, default=3.0,
+                        help="Standard deviation multiplier for loss regularization")
+    parser.add_argument("--loss_reg_min_epoch", type=int, default=5,
+                        help="Minimum epoch to start loss regularization")  
+    parser.add_argument("--loss_reg_num_tracking_steps", type=int, default=300,
+                        help="Number of steps to track for loss regularization")
+    parser.add_argument("--save_every_freq", type=int, default=20,
+                        help="Frequency (in epochs) to save checkpoints (0 to disable)")
+
     # Model and data
     
     parser.add_argument("--data_root", type=str, default="~/data",
