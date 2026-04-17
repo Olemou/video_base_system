@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 # ============================================================
 
 @dataclass
-class ThermalAugConfig:
+class thermalAugConfig:
     image_size: int = 224
 
     # Thermal erase
@@ -65,7 +65,7 @@ class ThermalAugConfig:
 # ============================================================
 
 class ThermalAugmentor:
-    def __init__(self, config: ThermalAugConfig = ThermalAugConfig()):
+    def __init__(self, config: thermalAugConfig = thermalAugConfig()):
         self.cfg = config
 
     # --------------------------------------------------------
