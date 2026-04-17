@@ -75,7 +75,7 @@ class AttentionBlock(nn.Module):
         B, T, N, C = x.shape
         x = x.view(B, T * N, C)  # [B, T*N, C]
                   
-        tuple_out = self.spatial_temporal_attn(x = self.norm_spatial_temporal(x),return_attn=False, T=T, H_patches= int(math.sqrt(N)), W_patches= int(math.sqrt(N)))
+        tuple_out = self.spatial_temporal_attn(x = self.norm_spatial_temporal(x),return_attn=True, T=T, H_patches= int(math.sqrt(N)), W_patches= int(math.sqrt(N)))
         
         
         spatial_temporal_output, self.attn_weght = tuple_out
@@ -175,8 +175,9 @@ class visionVideoTransformer(nn.Module):
         # Attention block
         for index, block in enumerate(self.blocks):
             x = block(x, index)
-        print(x.shape)
+        print("x.shape:", x.shape)
         weights = torch.softmax(x.mean(dim=-1).mean(dim=-1), dim=1)  # [B, T]
+        print("weights.shape:", weights.shape)
         z_t = torch.einsum('btnd,bt->bnd', x, weights)          # [B, N, D]
         return z_t
     
@@ -193,7 +194,11 @@ if __name__ == "__main__":
     dummy_video = torch.randn(2, 3, 4, 224, 224).to(device)
     
     # Forward pass
-    output,_ = model(dummy_video)
-    print(output.shape)
+    output= model(dummy_video)
+    
+    attn = model.blocks[0].attn_weght
+    if attn is not None:
+        print("Attention weights shape:", attn.shape)
+    print("output.shape:", output.shape)
     total_params = sum(p.numel() for p in model.parameters())
     print(f"Total parameters: {total_params}")

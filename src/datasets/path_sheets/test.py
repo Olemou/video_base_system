@@ -6,9 +6,9 @@ from pathlib import Path
 
 def rename_and_create_csv(
     image_folder,
-    output_csv="images.csv",
-    prefix="no_spill",
-    excelfileName="datasets/folderImage1/no_spill"
+    output_csv="folder_images_2.csv",
+    prefix="spill",
+    excelfileName="datasets/folderImage2/spill"
 ):
     image_folder = Path(image_folder)
 
@@ -67,10 +67,11 @@ def rename_and_create_csv(
 
 # Usage
 if __name__ == "__main__":
-    path = r"C:\Users\efo6780\Documents\data"
+    path = r"C:\Users\efo6780\Documents\donnees\folderImage80"
 
     rename_and_create_csv(
         image_folder=path,
-        output_csv="images.csv",
-        prefix="no_spill"
+        output_csv="folder_images_80.csv",
+        prefix="spill",
+        excelfileName="datasets/folderImage80/spill"
     )
