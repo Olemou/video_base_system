@@ -25,7 +25,6 @@ class UncertaintyAwareLoss(nn.Module):
         uncertainty = self.co_cluster_loss(z = z, labels=labels)  # [B, N, N]
 
         # Normalize embeddings
-        z = F.normalize(z, dim=1)
         sim = torch.matmul(z, z.T) / self.temperature  # [N, N]
         exp_sim = torch.exp(sim)
 

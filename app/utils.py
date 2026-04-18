@@ -49,7 +49,7 @@ class DataIterator:
                     
                     
 def set_lr_para(
-    lr0: float = 0.003,            # base LR from paper
+    lr0: float = 1e-3,            # base LR from paper
     B0: int = 4096,               # original global batch size from paper
     B_global: int = 512 * 4,         # your current global batch size
 ):
@@ -94,7 +94,7 @@ def create_optimizer(model, params: dict):
         },
     ]
 
-    num_layers = len(model.transformer.layers)
+    num_layers = len(model.attn_layers)
     early_idx = list(range(0, int(0.4 * num_layers)))
     mid_idx   = list(range(int(0.4 * num_layers), int(0.7 * num_layers)))
     late_idx  = list(range(int(0.7 * num_layers), num_layers))

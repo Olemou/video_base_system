@@ -4,12 +4,16 @@ import argparse
 import json
 import time
 import socket
+
+from h11 import Data
+from transformers.convert_slow_tokenizers_checkpoints_to_fast import args
 from app.utils import DataIterator
 from app.utils import  cosine_schedule
 import logging
 import os
 from src.src_utils.logging import gpu_timer, CSVLogger
 from src.src_utils.utils import AverageMeter
+from src.loss_fn.loss import UncertaintyAwareLoss
 import gc
 import numpy as np
 import torch
@@ -20,9 +24,10 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import random
 from src.src_utils.logging import get_logger
 from src.datasets.data_manager import init_data
+from src.datasets.utils.utils import get_base_path, get_path_sheets
+from app.model import KalmanFormerNetVideoModel
 
-
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("=====================================DDP Training===================================================================")
 
 logger = get_logger("DDP Training", log_dir="~/log", log_file="ddp_training.txt")
 
@@ -35,14 +40,6 @@ def set_trainable(module, flag: bool):
     for param in module.parameters():
         param.requires_grad = flag
 
-#============================== Data Initialisation here ===============================================  
-dataloader, sampler = init_data(
-    data_paths=["~/data"],
-    batch_size=arg,
-    num_workers=8,  
-)
-
-# =============================================================================
 # ENVIRONMENT SETUP
 # =============================================================================
 
@@ -125,6 +122,8 @@ def parse_arguments():
                         help="Number of steps to track for loss regularization")
     parser.add_argument("--save_every_freq", type=int, default=20,
                         help="Frequency (in epochs) to save checkpoints (0 to disable)")
+    parser.add_argument("--warmup_epochs", type=int, default=10,
+                        help="Number of warmup epochs") 
 
     # Model and data
     
@@ -328,16 +327,11 @@ def main():
 
 def train_model(
     model,
-    dataloader,
     criterion,
-    device,
-    num_epochs,
     args,
     steps_per_epoch,
     optimizer,
-    warmup_epochs,
     scaler = torch.amp.GradScaler(),
-    sampler=None,
     sync_gc = True,
     GARBAGE_COLLECT_ITR_FREQ=50
 ):
@@ -352,7 +346,8 @@ def train_model(
         synchronize()
         if is_main_process():
             logger.info(f"✅ All {args.world_size} processes synchronized across {args.nnodes} nodes")
-    #================================================================================================  
+
+    #=====================================================================================================
     folder = args.interpreter_dir
     rank = args.rank
     which_dtype = args.dtype
@@ -364,10 +359,21 @@ def train_model(
     loss_reg_num_tracking_steps = args.loss_reg_num_tracking_steps
     save_every_freq = args.save_every_freq
     
-    
-    #================================================================================================    
+    #================================================================================================  
+    #Data Loading and Dataloader setup   
+    #================================================================================================  
+    dataloader, sampler = init_data(
+    data_paths = get_path_sheets(),
+    batch_size=batch_size,
+    num_workers=args.num_workers,
+    base_path=get_base_path(),
+    world_size=world_size,
+    rank=rank,  
+) 
+    steps_per_epoch = len(dataloader) 
+    #================================##===================================================    
     """Train a transformer model with gradual unfreezing on epoch 0, full training afterward."""
-    num_layers = len(model.transformer.layers)
+    num_layers = len(model.attn_layers)
     early = list(range(0, int(0.4 * num_layers)))
     mid   = list(range(int(0.4 * num_layers), int(0.7 * num_layers)))
     late  = list(range(int(0.7 * num_layers), num_layers))
@@ -412,9 +418,13 @@ def train_model(
         dtype = torch.float32
         mixed_precision = False
     #================================================================================================
-   
+    #============================== Loss Initialisation here ===============================================  
+    criterion = UncertaintyAwareLoss(prior_weight=0.5, TotalEpochs=args.n, temperature=0.1)    
+# =============================================================================
     #============  ================================================================
-
+    model = KalmanFormerNetVideoModel(
+         device = args.devvice
+     )
     #=====================================================================
     trailing_losses = []
     step_count = 0
@@ -423,7 +433,7 @@ def train_model(
         gc.disable()
         gc.collect()
 
-    for epoch in range(num_epochs):
+    for epoch in range(args.num_epochs):
         model.train()
         data_iter.set_epoch(epoch)
         trainable_layers = set()  # track unfreezed layers (epoch 0)
@@ -436,7 +446,7 @@ def train_model(
         gpu_time_meter.reset()
         #====================================================================
         #y cosine schedule at each epoch start
-        cosine_schedule(epoch, optimizer, warmup_epochs, num_epochs, min_lr=1e-6)
+        cosine_schedule(epoch, optimizer, args.warmup_epochs, args.num_epochs, min_lr=1e-6)
         
         
         #===============================================================================================
@@ -470,9 +480,9 @@ def train_model(
 
             if isinstance(batch, (list, tuple)):
                 inputs, targets = batch
-                inputs, targets = inputs.to(device), targets.to(device)
+                inputs, targets = inputs.to(args.device), targets.to(args.device)
             else:
-                inputs = batch.to(device)
+                inputs = batch.to(args.device)
                 targets = None
             data_elapsed_time_ms = (time.time() - itr_start_time) * 1000.0
 
@@ -603,7 +613,7 @@ def train_model(
             
          # -- Save Checkpoint
         logger.info("avg. loss %.3f" % loss_meter.avg)
-        if (epoch + 1) % CHECKPOINT_FREQ == 0 or epoch == (num_epochs - 1):
+        if (epoch + 1) % CHECKPOINT_FREQ == 0 or epoch == (args.num_epochs - 1):
             save_checkpoint(epoch + 1, latest_path)
             if save_every_freq > 0 and (epoch + 1) % save_every_freq == 0:
                 save_every_file = f"e{epoch}.pth.tar"

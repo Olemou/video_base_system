@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
-from .rotation_embedding_1d import RotaryEmbedding1D, apply_rotary_1d
-from .kalman_shift_mask import build_kalman_shifted_mask
-from .vision_config import VisionConfig
+from app.rotation_embedding_1d import RotaryEmbedding1D, apply_rotary_1d
+from app.kalman_shift_mask import build_kalman_shifted_mask
+from src.src_utils.vision_config import VisionConfig
 
 class temporalShiftedAttentionSignal(nn.Module):
     def __init__(self, config: VisionConfig, qkv_bias=True, use_rotary=True, theta=10000.0):

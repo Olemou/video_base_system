@@ -2,21 +2,24 @@ import math
 import torch
 import torch.nn as nn
 import os
+import torch.nn.functional as F
 import sys
-# Add parent folder to sys.path so 'src' can be found
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from src import (
-    VisionConfig, SpatialAttention2D, VisionTemporalAttention,
-    TokenLearner, KalmanFormerNet, PatchMerging,
-    TemporalSpatialStateGRU, PatchEmbedding3D, RoPEAttention
-)
+from app.kalman_former_net import KalmanFormerNet
+from  app.spation_attention_2d import SpatialAttention2D
+from  app.vision_temporal_attention import VisionTemporalAttention
+from  app.tokenlearner import TokenLearner
+from app.patch_embedding import PatchEmbedding3D, PatchMerging
+from  app.gru_customized import TemporalSpatialStateGRU
+from app.spatial_temporal_attention import RoPEAttention
+from src.src_utils.vision_config import VisionConfig
 from src.src_utils.utils import trunc_normal_
+
    
 class AttentionBlock(nn.Module):
-    def __init__(self, config, device, qkv_bias=True,return_attn=True):
+    def __init__(self, config, qkv_bias=True,return_attn=True):
         super().__init__()
 
-        self.device = device
 
         self.norm_spatial = nn.LayerNorm(config.embed_dim)
         self.norm_temporal = nn.LayerNorm(config.embed_dim)
@@ -31,11 +34,11 @@ class AttentionBlock(nn.Module):
         # modules
         self.spatial_attn = SpatialAttention2D(config, qkv_bias=qkv_bias)
         self.temporal_attn = VisionTemporalAttention(config)
-        self.kalmanformerNet = KalmanFormerNet(config, device)
+        self.kalmanformerNet = KalmanFormerNet(config)
         self.patchmerging = PatchMerging(config)
         self.gru = TemporalSpatialStateGRU(config)
         self.spatial_temporal_attn = RoPEAttention(config, qkv_bias=qkv_bias)
-        self.attn_weght = None 
+        self.attn_weight = None 
 
         self.mlp = MLP(config.embed_dim, config.mlp_dim, config.embed_dim, drop=config.dropout)
 
@@ -75,14 +78,14 @@ class AttentionBlock(nn.Module):
         B, T, N, C = x.shape
         x = x.view(B, T * N, C)  # [B, T*N, C]
                   
-        tuple_out = self.spatial_temporal_attn(x = self.norm_spatial_temporal(x),return_attn=True, T=T, H_patches= int(math.sqrt(N)), W_patches= int(math.sqrt(N)))
+        tuple_out = self.spatial_temporal_attn(x = self.norm_spatial_temporal(x),return_attn=self.return_attn, T= T, H_patches= int(math.sqrt(N)), W_patches= int(math.sqrt(N)))
         
         
-        spatial_temporal_output, self.attn_weght = tuple_out
+        spatial_temporal_output, self.attn_weight = tuple_out
         x = x + self.dropout(spatial_temporal_output)
         
         # =========================
-        # 6. MLP (standard GPT block)
+        # 6. MLP 
         # =========================
         x = x + self.dropout(self.mlp(self.norm_mlp(x)))
         x = x.reshape(B, T, N, C)
@@ -114,14 +117,35 @@ class MLP(nn.Module):
         x = self.drop(x)
         return x
     
-class visionVideoTransformer(nn.Module):
-    def __init__(self, config: VisionConfig, device: torch.device,
-                 qkv_bias=True, return_attn=False, dropout_prob=0.1, init_type="xavier_uniform", init_std=0.02):
+class ProjectionHead(nn.Module):
+    def __init__(self, config: VisionConfig):
+        super().__init__()
+        self.projection  = nn.Sequential(
+                nn.Linear(config.embed_dim, config.embed_dim),
+                nn.GELU(),
+                nn.Linear(config.embed_dim, config.projection_dim)
+            )
+                    
+        nn.Linear(config.embed_dim, config.projection_dim)
+
+    def forward(self, x):
+        # x: # [B, N, D]
+        B, N, D = x.shape
+        x = x.view(B * N, D)  # [B*N, D]
+        x = self.projection(x)     # [B*N, projection_dim]
+        x = x.view(B, N, -1)   # [B, N, projection_dim]
+        x = F.normalize(x, dim=-1)
+        return x
+    
+class KalmanFormerNetVideoModel(nn.Module):
+    def __init__(self, config: VisionConfig,
+                 qkv_bias=True, return_attn=False, init_type="xavier_uniform", init_std=0.02):
         super().__init__()
         self.patch_embedding = PatchEmbedding3D(config)
-        self.blocks = nn.ModuleList(
+        self.head = ProjectionHead(config)  
+        self.attn_layers = nn.ModuleList(
             [AttentionBlock(
-                config = config, device = device,
+                config = config,
             qkv_bias=qkv_bias, return_attn=return_attn
         ) for _ in range(config.depth)]
         )
@@ -173,20 +197,20 @@ class visionVideoTransformer(nn.Module):
         # Patch embedding
         x = self.patch_embedding(video)
         # Attention block
-        for index, block in enumerate(self.blocks):
+        for index, block in enumerate(self.attn_layers):
             x = block(x, index)
-        print("x.shape:", x.shape)
         weights = torch.softmax(x.mean(dim=-1).mean(dim=-1), dim=1)  # [B, T]
         print("weights.shape:", weights.shape)
         z_t = torch.einsum('btnd,bt->bnd', x, weights)          # [B, N, D]
-        return z_t
+        out = self.head(z_t)  # [B, N, projection_dim]
+        return out
     
 # Choose device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Instantiate the model
 config = VisionConfig()
-model = visionVideoTransformer(config, device).to(device)
+model = KalmanFormerNetVideoModel(config, device).to(device)
 
 # Optional: test with dummy input
 if __name__ == "__main__":
@@ -194,9 +218,9 @@ if __name__ == "__main__":
     dummy_video = torch.randn(2, 3, 4, 224, 224).to(device)
     
     # Forward pass
-    output= model(dummy_video)
+    output = model(dummy_video)
     
-    attn = model.blocks[0].attn_weght
+    attn = model.attn_layers[0].attn_weight
     if attn is not None:
         print("Attention weights shape:", attn.shape)
     print("output.shape:", output.shape)

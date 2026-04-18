@@ -19,12 +19,12 @@ class CoClusterOpinionLoss(nn.Module):
         total_mass = e_pos + e_neg + prior_weight
         return prior_weight / total_mass
 
-    def forward(self, Z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
+    def forward(self, z: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
 
-        assert labels.shape[0] == Z.shape[0], f"{labels.shape[0]} != {Z.shape[0]}"
+        assert labels.shape[0] == z.shape[0], f"{labels.shape[0]} != {z.shape[0]}"
 
         # Similarity
-        sim = torch.matmul(Z, Z.T)
+        sim = torch.matmul(z, z.T)
         sim.fill_diagonal_(0.0)
 
         uncertainty = self.similarity_to_evidence(sim)

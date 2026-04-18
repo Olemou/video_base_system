@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
-from .vision_config import VisionConfig
+from src.src_utils.vision_config import VisionConfig
 
 class MlpBlock(nn.Module):
     def __init__(self, config: VisionConfig):

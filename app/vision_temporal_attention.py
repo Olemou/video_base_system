@@ -2,8 +2,8 @@
 import math
 import torch
 import torch.nn as nn
-from .rotation_embedding_1d import RotaryEmbedding1D, apply_rotary_1d
-from .vision_config import VisionConfig
+from app.rotation_embedding_1d import RotaryEmbedding1D, apply_rotary_1d
+from src.src_utils.vision_config import VisionConfig
 class VisionTemporalAttention(nn.Module):
 
 

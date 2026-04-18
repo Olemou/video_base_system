@@ -4,8 +4,8 @@
 import torch
 import math
 import torch.nn as nn
-from .rotation_embedding_2d import RotaryEmbedding2D, apply_rotary_2d  
-from .vision_config import VisionConfig  
+from app.rotation_embedding_2d import RotaryEmbedding2D, apply_rotary_2d  
+from src.src_utils.vision_config import VisionConfig  
 
 class SpatialAttention2D(nn.Module):
     def __init__(self, config: VisionConfig, qkv_bias=True, isFilter=False):

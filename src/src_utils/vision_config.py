@@ -22,6 +22,7 @@ class VisionConfig:
                  qkv_bias=False,
                  spatial_temporal_attention_heads=8,
                  grid_size_spatial_temporal=7,
+                 projection_dim =256
                ):
         """_summary_
 
@@ -73,4 +74,5 @@ class VisionConfig:
         self.qkv_bias = qkv_bias
         self.spatial_temporal_attention_heads = spatial_temporal_attention_heads
         self.grid_size_spatial_temporal = grid_size_spatial_temporal
+        self.projection_dim = projection_dim
         

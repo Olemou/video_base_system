@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from src.vision_config import VisionConfig
+from src.src_utils.vision_config import VisionConfig
 from timm.layers import drop_path
 
 

@@ -89,6 +89,16 @@ def get_base_path() -> Path:
     path = BASE_DIR / "config" / "dataset_config.yaml"
     config = load_config(path)
     return Path(config.get("data_root", "")).expanduser().resolve()
+import re
+
+def expand(pattern:str ="Image[1-3]") -> List[str]:
+    match = re.match(r"(.*)\[(\d+)-(\d+)\]", pattern)
+    if match:
+        base, start, end = match.groups()
+        return [f"{base}{i}" for i in range(int(start), int(end)+1)]
+    return [pattern]
+
+
 
 if __name__ == "__main__":
     sheets = get_all_sheets()
@@ -97,5 +107,6 @@ if __name__ == "__main__":
         print(f" - {sheet}")
     root = get_base_path()
     print(f"Base path: {root}")
+    img_dirs = expand("folderImage")
 
 
