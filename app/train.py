@@ -604,6 +604,3 @@ def main(
         if sync_gc:
             gc.enable()
 
-
-if __name__ == "__main__":
-    main()
