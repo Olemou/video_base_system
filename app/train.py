@@ -5,10 +5,8 @@ import json
 import time
 import socket
 
-from h11 import Data
-from transformers.convert_slow_tokenizers_checkpoints_to_fast import args
 from app.utils import DataIterator
-from app.utils import  cosine_schedule
+from app.utils import  cosine_schedule, set_lr_para, create_optimizer
 import logging
 import os
 from src.src_utils.logging import gpu_timer, CSVLogger
@@ -26,7 +24,7 @@ from src.src_utils.logging import get_logger
 from src.datasets.data_manager import init_data
 from src.datasets.utils.utils import get_base_path, get_path_sheets
 from app.model import KalmanFormerNetVideoModel
-
+from src.src_utils.vision_config import VisionConfig
 logger = logging.getLogger("=====================================DDP Training===================================================================")
 
 logger = get_logger("DDP Training", log_dir="~/log", log_file="ddp_training.txt")
@@ -296,45 +294,14 @@ def synchronize():
 
 
 # =============================================================================
-# MAIN FUNCTION EXAMPLE
-# =============================================================================
 
-def main():
-    """Main training function."""
-    
-    # Setup
-    setup_environment()
-    args = parse_arguments()
-    args = init_distributed_mode(args)
-    seed_everything(args.seed)
-    
-    # FIX: Verify distributed setup before proceeding
-    if args.distributed:
-        synchronize()
-        if is_main_process():
-            logger.info(f"✅ All {args.world_size} processes synchronized across {args.nnodes} nodes")
-    # Your training code here...
-    print(f"Process {args.rank} ready for training")
-    
-    # Cleanup
-    if args.distributed:
-        cleanup_distributed()
-        
-# -------------------------------
+
 # Training function
 # -------------------------------
-
-
-def train_model(
-    model,
-    criterion,
-    args,
-    steps_per_epoch,
-    optimizer,
-    scaler = torch.amp.GradScaler(),
-    sync_gc = True,
-    GARBAGE_COLLECT_ITR_FREQ=50
+def main(
 ):
+
+# -------------------------------
     # Setup =================================================================================================
     setup_environment()
     args = parse_arguments()
@@ -358,6 +325,10 @@ def train_model(
     loss_reg_min_epoch  = args.loss_reg_min_epoch
     loss_reg_num_tracking_steps = args.loss_reg_num_tracking_steps
     save_every_freq = args.save_every_freq
+    
+    scaler = torch.amp.GradScaler(),
+    sync_gc = True,
+    GARBAGE_COLLECT_ITR_FREQ=50
     
     #================================================================================================  
     #Data Loading and Dataloader setup   
@@ -418,14 +389,24 @@ def train_model(
         dtype = torch.float32
         mixed_precision = False
     #================================================================================================
+    
     #============================== Loss Initialisation here ===============================================  
-    criterion = UncertaintyAwareLoss(prior_weight=0.5, TotalEpochs=args.n, temperature=0.1)    
-# =============================================================================
+    criterion = UncertaintyAwareLoss(prior_weight=0.5, TotalEpochs=args.num_epochs, temperature=0.1)    
+    # =============================================================================
+    
+    
+        #Intialization of model encoder
     #============  ================================================================
     model = KalmanFormerNetVideoModel(
-         device = args.devvice
-     )
+     config = VisionConfig()
+     ).to(args.device)
     #=====================================================================
+    
+    #==================================================optimizer===================================
+    parameters = set_lr_para(
+    B_global= args.global_batch_size)
+    optimizer = create_optimizer( model = model,params=  parameters)
+    #===========================================================================================================
     trailing_losses = []
     step_count = 0
     # ----- Garbage collection before batch -----

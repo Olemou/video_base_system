@@ -102,19 +102,19 @@ def create_optimizer(model, params: dict):
 # Add transformer blocks as separate param groups
     param_groups += [
         {
-            "params": [p for i, layer in enumerate(model.transformer.layers) if i in early_idx for p in layer.parameters()],
+            "params": [p for i, layer in enumerate(model.attn_layers) if i in early_idx for p in layer.parameters()],
             "lr": params["lr_early"],
             "weight_decay": params["weight_decay_early"],
             "initial_lr": params["lr_early"],
         },
         {
-            "params": [p for i, layer in enumerate(model.transformer.layers) if i in mid_idx for p in layer.parameters()],
+            "params": [p for i, layer in enumerate(model.attn_layers) if i in mid_idx for p in layer.parameters()],
             "lr": params["lr_mid"],
             "weight_decay": params["weight_decay_mid"],
             "initial_lr": params["lr_mid"],
         },
         {
-            "params": [p for i, layer in enumerate(model.transformer.layers) if i in late_idx for p in layer.parameters()],
+            "params": [p for i, layer in enumerate(model.attn_layers) if i in late_idx for p in layer.parameters()],
             "lr": params["lr_late"],
             "weight_decay": params["weight_decay_late"],
             "initial_lr": params["lr_late"],
