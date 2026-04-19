@@ -38,7 +38,7 @@ class kalmanGainNet(nn.Module):
 
         # Encoder: self-attention
 
-        context = self.encoder(enc_in, self.H_patch, self.W_patch)  # [B, N, 2D]
+        context = self.encoder(enc_in)  # [B, N, 2D]
 
         # Project encoder output to query
         query = self.query_proj(context)  # [B, N, D]
@@ -48,7 +48,7 @@ class kalmanGainNet(nn.Module):
         value = dec_kv[..., self.dim:]    # [B, N, D] - state_update_diff
 
         # Decoder: cross-attention
-        gain = self.decoder(query, key, value, self.H_patch, self.W_patch)  # [B, N, D]
+        gain = self.decoder(query, key, value)  # [B, N, D]
 
         # Final projection
         gain = self.gain_proj(gain)  # [B, N, D]
