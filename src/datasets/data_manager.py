@@ -178,7 +178,7 @@ class VideoDataset(torch.utils.data.Dataset):
         self.num_samples_per_dataset = []
         for data_path in self.data_paths:
 
-            if data_path[-4:] == ".csv":
+            if str(data_path).endswith(".csv"):
                 try:
                     data = pd.read_csv(data_path, header=None, delimiter=" ")
                 except pd.errors.ParserError:
@@ -234,8 +234,7 @@ class VideoDataset(torch.utils.data.Dataset):
             if not loaded_sample:
                 index = np.random.randint(self.__len__())
                 sample = self.samples[index]
-
-        return loaded_sample
+        return loaded_sample 
 
     def get_item_video(self, index):
         sample = self.samples[index]

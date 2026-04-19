@@ -77,17 +77,11 @@ def get_path_sheets(config: dict) -> List[Path]:
         for f in get_excel_files(folder)
     ]
     
-def get_all_sheets():
-    BASE_DIR = Path(__file__).resolve().parents[3]
-    path = BASE_DIR / "config" / "dataset_config.yaml"
-    config = load_config(path)
+def get_all_sheets(config):
     paths = get_path_sheets(config)
     return [str(p) for p in paths]
 
-def get_base_path() -> Path:
-    BASE_DIR = Path(__file__).resolve().parents[3]
-    path = BASE_DIR / "config" / "dataset_config.yaml"
-    config = load_config(path)
+def get_base_path(config) -> Path:
     return Path(config.get("data_root", "")).expanduser().resolve()
 import re
 

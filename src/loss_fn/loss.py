@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from loss_fn.utils import compute_lambda, CoClusterOpinionLoss
+from src.loss_fn.utils import compute_lambda,CoClusterOpinionLoss
 
 class UncertaintyAwareLoss(nn.Module):
     def __init__(self, prior_weight=0.5, TotalEpochs: int = 100, temperature: float = 0.1):

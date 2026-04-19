@@ -6,7 +6,7 @@ from dataclasses import dataclass
 import kornia.augmentation as K
 import torchvision.transforms as transforms
 from PIL import Image
-import matplotlib.pyplot as plt
+import torch.nn.functional as F
 
 # ============================================================
 # CONFIG
@@ -204,6 +204,8 @@ class ThermalAugmentor:
             """
             Apply multiple stochastic augmentations independently
             """
+            
+            buffer = self.resize_buffer(buffer, size=(224, 224))
 
             if torch.rand(1).item() < self.cfg.occlusion_prob:
                 buffer = self._thermal_erase(buffer)
@@ -229,7 +231,8 @@ class ThermalAugmentor:
     def _apply_geometric_transforms(self, buffer: torch.Tensor) -> torch.Tensor:
         import torchvision.transforms.functional as TF
 
-        T, H, W, C = buffer.shape
+        T,_,_,_ = buffer.shape
+        self.resize_buffer(buffer)
         buffer_tv = buffer.permute(0, 3, 1, 2)
 
         aug = K.AugmentationSequential(
@@ -298,7 +301,7 @@ class ThermalAugmentor:
             """
             if tensor.dtype == torch.uint8:
                 tensor = tensor.float()
-            
+            tensor = tensor.permute(3, 0, 1, 2)
             # Your mean/std are for [0,1] range, but tensor is [0,255]
             # Convert mean/std to [0,255] range
             if tensor.max() > 1.0:  # Tensor is in [0,255] range
@@ -314,4 +317,16 @@ class ThermalAugmentor:
             tensor = tensor.permute(1, 0).view(C, T, H, W)
             return tensor
         
-        
+    def resize_buffer(buffer : torch.Tensor, size=(224, 224)):
+        # buffer: [T, H, W, 3]
+
+        # convert to [T, C, H, W]
+        buffer = buffer.permute(0, 3, 1, 2)
+
+        # resize each frame (or whole batch at once)
+        buffer = F.interpolate(buffer, size=size, mode="bilinear", align_corners=False)
+
+        # back to [T, H, W, 3]
+        buffer = buffer.permute(0, 2, 3, 1)
+
+        return buffer

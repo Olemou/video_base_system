@@ -4,10 +4,9 @@ import argparse
 import json
 import time
 import socket
-
+from pathlib import Path
 from app.utils import DataIterator
 from app.utils import  cosine_schedule, set_lr_para, create_optimizer
-import logging
 import os
 from src.src_utils.logging import gpu_timer, CSVLogger
 from src.src_utils.utils import AverageMeter
@@ -22,12 +21,10 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import random
 from src.src_utils.logging import get_logger
 from src.datasets.data_manager import init_data
-from src.datasets.utils.utils import get_base_path, get_path_sheets
+from src.datasets.utils.utils import get_base_path, get_path_sheets, load_config
 from app.model import KalmanFormerNetVideoModel
 from src.src_utils.vision_config import VisionConfig
-logger = logging.getLogger("=====================================DDP Training===================================================================")
-
-logger = get_logger("DDP Training", log_dir="~/log", log_file="ddp_training.txt")
+logger = get_logger("===DDP Training===",force=True)
 
 #=============================================================================
 # -------------------------------
@@ -317,7 +314,7 @@ def main(
     #=====================================================================================================
     folder = args.interpreter_dir
     rank = args.rank
-    which_dtype = args.dtype
+    which_dtype = args.which_dtype
     batch_size = args.global_batch_size // args.world_size
     world_size = args.world_size
     lr = args.learning_rate * (args.global_batch_size / 4096)  # scale LR by global batch size
@@ -333,15 +330,29 @@ def main(
     #================================================================================================  
     #Data Loading and Dataloader setup   
     #================================================================================================  
+   
+    BASE_DIR = Path(__file__).resolve().parents[1]
+    path_config = BASE_DIR / "config" / "dataset_config.yaml"
+    #==========================================================================================
+    config_path = load_config(path_config)
+    
     dataloader, sampler = init_data(
-    data_paths = get_path_sheets(),
+    data_paths = get_path_sheets(config_path),
     batch_size=batch_size,
     num_workers=args.num_workers,
-    base_path=get_base_path(),
+    base_path=get_base_path(config_path),
     world_size=world_size,
     rank=rank,  
 ) 
     steps_per_epoch = len(dataloader) 
+  #=========================================================
+     #Intialization of model encoder
+    #============  ================================================================
+    model = KalmanFormerNetVideoModel(
+     config = VisionConfig()
+     ).to(args.device)
+    #=====================================================================
+    
     #================================##===================================================    
     """Train a transformer model with gradual unfreezing on epoch 0, full training afterward."""
     num_layers = len(model.attn_layers)
@@ -393,14 +404,6 @@ def main(
     #============================== Loss Initialisation here ===============================================  
     criterion = UncertaintyAwareLoss(prior_weight=0.5, TotalEpochs=args.num_epochs, temperature=0.1)    
     # =============================================================================
-    
-    
-        #Intialization of model encoder
-    #============  ================================================================
-    model = KalmanFormerNetVideoModel(
-     config = VisionConfig()
-     ).to(args.device)
-    #=====================================================================
     
     #==================================================optimizer===================================
     parameters = set_lr_para(
@@ -460,7 +463,7 @@ def main(
             batch = data_iter.next(epoch)
 
             if isinstance(batch, (list, tuple)):
-                inputs, targets = batch
+                inputs, targets, _ = batch
                 inputs, targets = inputs.to(args.device), targets.to(args.device)
             else:
                 inputs = batch.to(args.device)
@@ -603,4 +606,3 @@ def main(
 
         if sync_gc:
             gc.enable()
-
