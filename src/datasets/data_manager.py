@@ -6,7 +6,7 @@ import math
 import os
 import pathlib
 import warnings
-from logging import getLogger
+from src.src_utils.logging import get_logger
 
 from numpy.strings import index
 from src.datasets.augmentation.motion import MotionAugmentation
@@ -23,8 +23,19 @@ from src.datasets.utils.dataloader import (
 )
 
 _GLOBAL_SEED = 0
-logger = getLogger()
+logger = get_logger(__name__,force = True)
 
+def collate_fn(batch):
+    inputs, targets, indices = zip(*batch)
+
+    # stack video tensors
+    inputs = torch.stack(inputs, dim=0)   # [B, C, T, H, W]
+
+    # convert labels
+    targets = torch.tensor(targets, dtype=torch.long)
+
+    # convert indices
+    return inputs, targets
 def init_data(
     data_paths,
     batch_size,
@@ -92,10 +103,11 @@ def init_data(
     dist_sampler = torch.utils.data.distributed.DistributedSampler(
             dataset, num_replicas=world_size, rank=rank, shuffle=True
         )
+    
 
     data_loader = torch.utils.data.DataLoader(
             dataset,
-            collate_fn=collator,
+            collate_fn=None,
             sampler=dist_sampler,
             batch_size=batch_size,
             drop_last=drop_last,
@@ -286,7 +298,7 @@ class VideoDataset(torch.utils.data.Dataset):
         # Apply motion to create fake video clip
         buffer = self.motion_aug.apply_motion(buffer, clip_index=index)
         if self.transform:
-            buffer = [self._thermal_aug(buffer=buffer, is_shared=False)]
+            buffer = self._thermal_aug(buffer=buffer, is_shared=False)
 
         return buffer, label, clip_indices
 

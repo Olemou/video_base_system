@@ -464,6 +464,7 @@ def main(
 
             if isinstance(batch, (list, tuple)):
                 inputs, targets, _ = batch
+             
                 inputs, targets = inputs.to(args.device), targets.to(args.device)
             else:
                 inputs = batch.to(args.device)
@@ -479,14 +480,14 @@ def main(
                     elif current_progress >= end_progress:
                         for l in layers:
                             if l not in trainable_layers:
-                                set_trainable(model.transformer.layers[l], True)
+                                set_trainable(model.attn_layers[l], True)
                                 trainable_layers.add(l)
                     else:
                         frac = (current_progress - start_progress) / (end_progress - start_progress)
                         num_to_unfreeze = max(1, int(len(layers) * frac))
                         for l in layers[-num_to_unfreeze:]:
                             if l not in trainable_layers:
-                                set_trainable(model.transformer.layers[l], True)
+                                set_trainable(model.attn_layers[l], True)
                                 trainable_layers.add(l)
 
                 gradual_unfreeze(late, start_progress=0.0, end_progress=0.2, current_progress=progress)
@@ -497,7 +498,7 @@ def main(
 
             else:
                 # Epoch >=1: all layers trainable
-                for layer in model.transformer.layers:
+                for layer in model.attn_layers:
                     set_trainable(layer, True)
                 set_trainable(model.head, True)
 
