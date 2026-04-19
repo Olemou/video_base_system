@@ -29,19 +29,10 @@ def collate_fn(batch):
 
     # stack video tensors
     inputs = torch.stack(inputs, dim=0)   # [B, C, T, H, W]
-
     # convert labels
     targets = torch.tensor(targets, dtype=torch.long)
-
-    # convert indices
-    
-    #indices = torch.tensor(indices, dtype=torch.long)
-
     return inputs, targets
 
-    indices = torch.tensor(indices)
-    print(targets[0], type(targets[0]),type(indices[0]))
-    return inputs, targets, indices
 def init_data(
     data_paths,
     batch_size,
