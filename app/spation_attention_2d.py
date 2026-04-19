@@ -16,9 +16,12 @@ class SpatialAttention2D(nn.Module):
         else:
             self.num_heads = config.num_heads_spatial_attn
             
-        assert config.embed_dim % self.num_heads == 0
-        self.dim = config.embed_dim
-        self.head_dim = config.embed_dim // self.num_heads
+        if isFilter:
+          self.dim = 2*config.embed_dim
+        else:
+          self.dim = config.embed_dim
+        assert  self.dim  % self.num_heads == 0
+        self.head_dim = self.dim // self.num_heads
 
         self.norm = nn.LayerNorm(self.dim)
         self.qkv = nn.Linear(self.dim, self.dim * 3, bias=qkv_bias)

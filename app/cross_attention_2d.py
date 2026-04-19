@@ -46,6 +46,5 @@ class CrossAttention2D(nn.Module):
         out = attn @ v
         out = out.transpose(1, 2).reshape(B, N, D)
         out = self.proj(out)
-        out = self.proj_drop(out)
-
+        
         return out

@@ -71,7 +71,7 @@ class AttentionBlock(nn.Module):
         # =========================
         # 5. GRU fusion (residual)
         # =========================
-        x_gru, _ = self.gru(self.norm_gru(x), x)
+        x_gru = self.gru(self.norm_gru(x), x)
         x = x + self.dropout(x_gru)
         
         # spatial_temporal_attention_heads = 8
@@ -200,7 +200,6 @@ class KalmanFormerNetVideoModel(nn.Module):
         for index, block in enumerate(self.attn_layers):
             x = block(x, index)
         weights = torch.softmax(x.mean(dim=-1).mean(dim=-1), dim=1)  # [B, T]
-        print("weights.shape:", weights.shape)
         z_t = torch.einsum('btnd,bt->bnd', x, weights)          # [B, N, D]
         out = self.head(z_t)  # [B, N, projection_dim]
         return out

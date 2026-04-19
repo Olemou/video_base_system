@@ -1,5 +1,4 @@
-data_root: ~/Documents/video_base_system/src/datasets
-
+data_root: /content/drive/MyDrive/video_base_system/datasets
 path_sheets:
   - path_sheets
 
