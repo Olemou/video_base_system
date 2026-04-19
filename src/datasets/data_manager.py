@@ -7,6 +7,7 @@ import os
 import pathlib
 import warnings
 from src.src_utils.logging import get_logger
+from src.src_utils.logging import get_logger
 
 from numpy.strings import index
 from src.datasets.augmentation.motion import MotionAugmentation
@@ -108,6 +109,7 @@ def init_data(
     dist_sampler = torch.utils.data.distributed.DistributedSampler(
             dataset, num_replicas=world_size, rank=rank, shuffle=True
         )
+    
 
     data_loader = torch.utils.data.DataLoader(
             dataset,

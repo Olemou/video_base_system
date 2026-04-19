@@ -84,7 +84,6 @@ def get_all_sheets(config):
 def get_base_path(config) -> Path:
     return Path(config.get("data_root", "")).expanduser().resolve().parent
 import re
-
 def expand(pattern:str ="Image[1-3]") -> List[str]:
     match = re.match(r"(.*)\[(\d+)-(\d+)\]", pattern)
     if match:

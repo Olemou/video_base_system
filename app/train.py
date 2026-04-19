@@ -497,7 +497,7 @@ def main(
 
             else:
                 # Epoch >=1: all layers trainable
-                for layer in model.transformer.layers:
+                for layer in model.attn_layers:
                     set_trainable(layer, True)
                 set_trainable(model.head, True)
 

@@ -87,6 +87,7 @@ class ThermalAugmentor:
 
         if torch.rand(1).item() >= self.cfg.horizontal_flip_prob:
             return x
+            return x
 
         x = torch.flip(x, dims=[2])
 
@@ -208,11 +209,14 @@ class ThermalAugmentor:
 
             if torch.rand(1).item() < self.cfg.occlusion_prob:
                 buffers = self._thermal_erase(buffers)
+                buffers = self._thermal_erase(buffers)
 
             if torch.rand(1).item() < self.cfg.brightness_contrast_prob:
                 buffers = self._brightness_contrast(buffers)
+                buffers = self._brightness_contrast(buffers)
               
             if torch.rand(1).item() < self.cfg.thermal_contrast_prob:
+                buffers = self._thermal_contrast(buffers)
                 buffers = self._thermal_contrast(buffers)
 
             if torch.rand(1).item() < self.cfg.elastic_transform_prob:
