@@ -100,7 +100,7 @@ def parse_arguments():
                         help="Master node port")
     
     # Training hyperparameters
-    parser.add_argument("--batch_size", type=int, default=16,
+    parser.add_argument("--batch_size", type=int, default=32,
                         help="Batch size per GPU")
     parser.add_argument("--num_epochs", type=int, default=100,
                         help="Number of training epochs")
@@ -118,7 +118,7 @@ def parse_arguments():
                         help="Minimum epoch to start loss regularization")  
     parser.add_argument("--loss_reg_num_tracking_steps", type=int, default=300,
                         help="Number of steps to track for loss regularization")
-    parser.add_argument("--save_every_freq", type=int, default=20,
+    parser.add_argument("--save_every_freq", type=int, default=10,
                         help="Frequency (in epochs) to save checkpoints (0 to disable)")
     parser.add_argument("--warmup_epochs", type=int, default=10,
                         help="Number of warmup epochs") 
@@ -128,10 +128,10 @@ def parse_arguments():
     parser.add_argument("--data_root", type=str, default="~/data",
                         help="Root directory for dataset (must be accessible from all nodes)")
     
-    parser.add_argument("--output_dir", type=str,
+    parser.add_argument("--monitoring_dir", type=str,
                         help="Output directory for checkpoints (shared across nodes)")
     
-    parser.add_argument("--checkpoint_dir", type=str,
+    parser.add_argument("--checkpoint_dir", type=str, default="",
                         help="Directory for saving checkpoints (shared across nodes)")
     parser.add_argument("--interpreter_dir", type=str, default = "/content/drive/MyDrive/data",
                         help="Directory for saving interpreter logs (shared across nodes)")
@@ -316,6 +316,7 @@ def main(
 
     #=====================================================================================================
     folder = args.interpreter_dir
+    check_point_folder = args.checkpoint_dir
     rank = args.rank
     which_dtype = args.which_dtype
     batch_size = args.global_batch_size // args.world_size
@@ -325,6 +326,7 @@ def main(
     loss_reg_min_epoch  = args.loss_reg_min_epoch
     loss_reg_num_tracking_steps = args.loss_reg_num_tracking_steps
     save_every_freq = args.save_every_freq
+    monitoring_dir = args.monitoring_dir
     
     scaler = torch.amp.GradScaler()
     sync_gc = True,
@@ -341,11 +343,12 @@ def main(
     
     dataloader, sampler = init_data(
     data_paths = get_path_sheets(config_path),
-    batch_size=16,
-    num_workers=4,
+    batch_size=args.batch_size,
+    num_workers=args.num_workers,
     base_path=get_base_path(config_path),
     world_size=world_size,
     rank=rank,  
+    log_dir=monitoring_dir
 ) 
     steps_per_epoch = len(dataloader) 
   #=========================================================
@@ -447,7 +450,7 @@ def main(
                     "loss": loss_meter.avg,
                     "batch_size": batch_size,
                     "world_size": world_size,
-                    "lr_encoder_ref": lr,
+                    "lr_encoder_reference": lr,
                     
                 }
                 try:
@@ -555,6 +558,7 @@ def main(
                     trailing_losses.append(loss)
                     if len(trailing_losses) > loss_reg_num_tracking_steps:
                         trailing_losses = trailing_losses[1:]
+                        step_count = 0
                 else:
                     step_count += 1
                     if step_count > MAX_REPEAT_COUNTS:
@@ -604,7 +608,7 @@ def main(
             save_checkpoint(epoch + 1, latest_path)
             if save_every_freq > 0 and (epoch + 1) % save_every_freq == 0:
                 save_every_file = f"e{epoch}.pth.tar"
-                save_every_path = os.path.join(folder, save_every_file)
+                save_every_path = os.path.join(check_point_folder, save_every_file)
                 save_checkpoint(epoch + 1, save_every_path)
 
         if sync_gc:
