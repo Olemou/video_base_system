@@ -89,7 +89,7 @@ def init_data(
     dataset_size = len(dataset)
     train_size = int(0.9 * dataset_size)
     val_size = dataset_size - train_size
-    rain_dataset, val_dataset = torch.utils.data.random_split(
+    train_dataset, val_dataset = torch.utils.data.random_split(
         dataset,
         [train_size, val_size],
         generator=torch.Generator().manual_seed(42)  # reproducible

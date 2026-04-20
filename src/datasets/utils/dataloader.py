@@ -86,14 +86,6 @@ class MonitoredDataset(torch.utils.data.Dataset):
         self._monitoring_thread = None
         self._last_log_time = None
         # Patch getitems dynamically
-        if hasattr(self.dataset, "__getitems__") and self.dataset.__getitems__:
-
-            def __getitems__(self, index):
-                self.maybe_start_resource_monitoring()
-                return self.dataset.__getitems__(index)
-
-            self.__getitems__ = __getitems__
-
     def __del__(self):
         self.stop_resource_monitoring()
 

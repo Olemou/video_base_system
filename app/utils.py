@@ -50,8 +50,8 @@ class DataIterator:
                     
 def set_lr_para(
     lr0: float = 1e-3,            # base LR from paper
-    B0: int = 4096,               # original global batch size from paper
-    B_global: int = 512 * 4,         # your current global batch size
+    B0: int = 512,               # original global batch size from paper
+    B_global: int = 32 * 4,         # your current global batch size
 ):
     """
     Define parameter groups for optimizer with separate weight decays
