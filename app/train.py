@@ -24,8 +24,10 @@ from src.datasets.data_manager import init_data
 from src.datasets.utils.utils import get_base_path, get_path_sheets, load_config
 from app.model import KalmanFormerNetVideoModel
 from src.src_utils.vision_config import VisionConfig
-logger = get_logger("===DDP Training===",force=True)
-
+logger = get_logger("DDP Training",force=True)
+import warnings
+warnings.filterwarnings("error")
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 #=============================================================================
 # -------------------------------
 # Helper to set requires_grad
@@ -54,7 +56,8 @@ def setup_environment():
     
     # PyTorch optimizations
     os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:512")
-    
+
+    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
     # Prevent tokenizer parallelism warnings
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
@@ -97,7 +100,7 @@ def parse_arguments():
                         help="Master node port")
     
     # Training hyperparameters
-    parser.add_argument("--batch_size", type=int, default=512,
+    parser.add_argument("--batch_size", type=int, default=16,
                         help="Batch size per GPU")
     parser.add_argument("--num_epochs", type=int, default=100,
                         help="Number of training epochs")
@@ -130,7 +133,7 @@ def parse_arguments():
     
     parser.add_argument("--checkpoint_dir", type=str,
                         help="Directory for saving checkpoints (shared across nodes)")
-    parser.add_argument("--interpreter_dir", type=str,
+    parser.add_argument("--interpreter_dir", type=str, default = "/content/drive/MyDrive/data",
                         help="Directory for saving interpreter logs (shared across nodes)")
 
     # Checkpointing and logging
@@ -323,7 +326,7 @@ def main(
     loss_reg_num_tracking_steps = args.loss_reg_num_tracking_steps
     save_every_freq = args.save_every_freq
     
-    scaler = torch.amp.GradScaler(),
+    scaler = torch.amp.GradScaler()
     sync_gc = True,
     GARBAGE_COLLECT_ITR_FREQ=50
     
@@ -338,8 +341,8 @@ def main(
     
     dataloader, sampler = init_data(
     data_paths = get_path_sheets(config_path),
-    batch_size=batch_size,
-    num_workers=args.num_workers,
+    batch_size=16,
+    num_workers=4,
     base_path=get_base_path(config_path),
     world_size=world_size,
     rank=rank,  
@@ -463,8 +466,9 @@ def main(
             batch = data_iter.next(epoch)
 
             if isinstance(batch, (list, tuple)):
-                inputs, targets, _ = batch
+                inputs, targets = batch
                 inputs, targets = inputs.to(args.device), targets.to(args.device)
+                print(inputs.shape)
             else:
                 inputs = batch.to(args.device)
                 targets = None
@@ -479,14 +483,14 @@ def main(
                     elif current_progress >= end_progress:
                         for l in layers:
                             if l not in trainable_layers:
-                                set_trainable(model.transformer.layers[l], True)
+                                set_trainable(model.attn_layers[l], True)
                                 trainable_layers.add(l)
                     else:
                         frac = (current_progress - start_progress) / (end_progress - start_progress)
                         num_to_unfreeze = max(1, int(len(layers) * frac))
                         for l in layers[-num_to_unfreeze:]:
                             if l not in trainable_layers:
-                                set_trainable(model.transformer.layers[l], True)
+                                set_trainable(model.attn_layers[l], True)
                                 trainable_layers.add(l)
 
                 gradual_unfreeze(late, start_progress=0.0, end_progress=0.2, current_progress=progress)
@@ -497,7 +501,7 @@ def main(
 
             else:
                 # Epoch >=1: all layers trainable
-                for layer in model.transformer.layers:
+                for layer in model.attn_layers:
                     set_trainable(layer, True)
                 set_trainable(model.head, True)
 
@@ -506,16 +510,15 @@ def main(
                 logger.info("Running garbage collection...")
                 gc.collect()
             # ---------- Forward and backward ----------
-            
             def train_forward_step():
                 outputs = model(inputs)
-                with torch.amp.autocast(dtype=dtype, enabled=mixed_precision):
+                with torch.amp.autocast(dtype=dtype, enabled=mixed_precision,device_type=args.device.type):
                     outputs = model(inputs)
-                    loss = criterion(outputs, targets) 
+                    loss = criterion(outputs, targets, epoch) 
                 
                 # Step 2. Backward & step
                 run_step = True
-                if loss_reg_std_mult is not None:
+                if loss_reg_std_mult is not None and len(trailing_losses):
                     meanval = np.mean(trailing_losses)
                     stdval = np.std(trailing_losses)
                     max_bound = meanval + loss_reg_std_mult * stdval
@@ -539,11 +542,11 @@ def main(
                     optimizer.zero_grad()
 
                 return  (
-                    float(loss),
+                  loss.detach().item(),
                     run_step,
                 )
             (loss,run_step), gpu_etime_ms = gpu_timer(train_forward_step)
-            loss_meter.update(loss.item(), n=inputs.size(0))
+            loss_meter.update(loss, n=inputs.size(0))
             gpu_time_meter.update(gpu_etime_ms)
             data_elapsed_time_meter.update(data_elapsed_time_ms)
             #=================================================================================

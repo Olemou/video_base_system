@@ -1,29 +1,30 @@
 
 class VisionConfig:
-  def __init__(self, embed_dim: int = 768, num_heads_spatial_attn: int = 12, num_heads_temporal_attn: int = 4, number_heads_cross_attn: int = 4, dropout: float = 0.1,
-               num_layers: int = 12, num_tokens: int = 16, bottleneck_dim: int = 256,
-               number_heads_spatial_kalman_attn: int = 4,
-               patch_size: int = 16, temporal_patch_size: int = 4,
-               channel: int = 3,
-               gready_token_threshold: float = 0.01,
-               h_patch_after_patch_embedding: int = 14,
-               w_patch_after_patch_embedding: int = 14,
-               h_patch: int = 7,
-               w_patch: int = 7,
-               depth: int = 12,
-               proj_drop: float = 0.1,
-               attn_drop: float = 0.1,
-               use_sdpa=False,
-               is_causal=False,
-               grid_size=14,
-               n_registers=0,
-                has_cls_first=False,
+    def __init__(self, embed_dim: int = 768, num_heads_spatial_attn: int = 12, num_heads_temporal_attn: int = 4, number_heads_cross_attn: int = 4, dropout: float = 0.1,
+                 num_layers: int = 12, num_tokens: int = 16, bottleneck_dim: int = 256,
+                 number_heads_spatial_kalman_attn: int = 4,
+                 patch_size: int = 16, temporal_patch_size: int = 4,
+                 channel: int = 3,
+                 gready_token_threshold: float = 0.01,
+                 h_patch_after_patch_embedding: int = 14,
+                 w_patch_after_patch_embedding: int = 14,
+                 h_patch: int = 7,
+                 w_patch: int = 7,
+                 depth: int = 12,
+                 proj_drop: float = 0.1,
+                 attn_drop: float = 0.1,
+                 use_sdpa=False,
+                 is_causal=False,
+                 grid_size=14,
+                 n_registers=0,
+                 has_cls_first=False,
                  interpolate_rope=False,
                  qkv_bias=False,
                  spatial_temporal_attention_heads=8,
                  grid_size_spatial_temporal=7,
-                 projection_dim =256
-               ):
+                 projection_dim=256,
+                 kalman_filter_embedding=768 * 2
+                 ):
         """_summary_
 
         Args:
@@ -75,4 +76,4 @@ class VisionConfig:
         self.spatial_temporal_attention_heads = spatial_temporal_attention_heads
         self.grid_size_spatial_temporal = grid_size_spatial_temporal
         self.projection_dim = projection_dim
-        
+        self.kalman_filter_embedding = kalman_filter_embedding

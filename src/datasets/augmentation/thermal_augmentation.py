@@ -86,7 +86,7 @@ class ThermalAugmentor:
         x = buffer.clone()
 
         if torch.rand(1).item() >= self.cfg.horizontal_flip_prob:
-            return x, boxes
+            return x
 
         x = torch.flip(x, dims=[2])
 
@@ -204,25 +204,24 @@ class ThermalAugmentor:
             """
             Apply multiple stochastic augmentations independently
             """
-            
-            buffer = self.resize_buffer(buffer, size=(224, 224))
+            buffers = self.resize_buffer(buffer, size=(224, 224))
 
             if torch.rand(1).item() < self.cfg.occlusion_prob:
-                buffer = self._thermal_erase(buffer)
+                buffers = self._thermal_erase(buffers)
 
             if torch.rand(1).item() < self.cfg.brightness_contrast_prob:
-                buffer = self._brightness_contrast(buffer)
+                buffers = self._brightness_contrast(buffers)
               
             if torch.rand(1).item() < self.cfg.thermal_contrast_prob:
-                buffer = self._thermal_contrast(buffer)
+                buffers = self._thermal_contrast(buffers)
 
             if torch.rand(1).item() < self.cfg.elastic_transform_prob:
-                buffer = self._elastic_transform(buffer)
+                buffers = self._elastic_transform(buffers)
                 
             if torch.rand(1).item() < self.cfg.horizontal_flip_prob:
-                buffer = self._horizontal_flip(buffer)
-            
-            return buffer
+                buffers = self._horizontal_flip(buffers)
+          
+            return buffers
 
 
     # ========================================================
@@ -232,7 +231,7 @@ class ThermalAugmentor:
         import torchvision.transforms.functional as TF
 
         T,_,_,_ = buffer.shape
-        self.resize_buffer(buffer)
+        buffer = self.resize_buffer(buffer)
         buffer_tv = buffer.permute(0, 3, 1, 2)
 
         aug = K.AugmentationSequential(
@@ -279,7 +278,6 @@ class ThermalAugmentor:
         Main entry: user calls pipeline(buffer)
         """
         buffer = buffer.clone()  # safety (avoid inplace bugs)
-
         # 1. global augmentations (optional)
         if is_shared:
             buffer = self._apply_geometric_transforms(buffer)
@@ -292,32 +290,34 @@ class ThermalAugmentor:
         return output
     
     def _tensor_normalize_inplace(self,tensor, mean, std):
-            """
-            Normalize a given tensor by subtracting the mean and dividing the std.
-            Args:
-                tensor (tensor): tensor to normalize with dimensions (C, T, H, W)
-                mean (tuple): mean values (expects values in same range as tensor)
-                std (tuple): std values (expects values in same range as tensor)
-            """
             if tensor.dtype == torch.uint8:
-                tensor = tensor.float()
-            tensor = tensor.permute(3, 0, 1, 2)
-            # Your mean/std are for [0,1] range, but tensor is [0,255]
-            # Convert mean/std to [0,255] range
-            if tensor.max() > 1.0:  # Tensor is in [0,255] range
-                mean = torch.tensor(mean) * 255.0
-                std = torch.tensor(std) * 255.0
-            else:
-                mean = torch.tensor(mean)
-                std = torch.tensor(std)
-            
+              tensor = tensor.float()
+
+            tensor = tensor.permute(3, 0, 1, 2)  # [C, T, H, W]
+
             C, T, H, W = tensor.shape
+
+            # ensure mean/std are tensors on correct device + dtype
+            mean = torch.tensor(mean, dtype=tensor.dtype, device=tensor.device)
+            std = torch.tensor(std, dtype=tensor.dtype, device=tensor.device)
+
+            # scale if needed (more stable check)
+            if tensor.max() > 1.5:
+                mean = mean * 255.0
+                std = std * 255.0
+
             tensor = tensor.view(C, -1).permute(1, 0)
-            tensor.sub_(mean).div_(std)
+
+            # avoid division by zero (VERY IMPORTANT)
+            std = torch.where(std == 0, torch.ones_like(std), std)
+
+            tensor = tensor.sub(mean).div(std)
+
             tensor = tensor.permute(1, 0).view(C, T, H, W)
+
             return tensor
         
-    def resize_buffer(buffer : torch.Tensor, size=(224, 224)):
+    def resize_buffer(self, buffer:torch.Tensor, size=(224, 224)):
         # buffer: [T, H, W, 3]
 
         # convert to [T, C, H, W]

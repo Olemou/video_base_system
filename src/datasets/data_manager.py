@@ -6,7 +6,7 @@ import math
 import os
 import pathlib
 import warnings
-from logging import getLogger
+from src.src_utils.logging import get_logger
 
 from numpy.strings import index
 from src.datasets.augmentation.motion import MotionAugmentation
@@ -21,10 +21,21 @@ from src.datasets.utils.dataloader import (
     ConcatIndices,
     MonitoredDataset,
 )
-
+logger = get_logger("===DDP dataset preparation===",force=True)
 _GLOBAL_SEED = 0
-logger = getLogger()
+def collate_fn(batch):
+    batch = [b for b in batch if b is not None]
 
+    if len(batch) == 0:
+        raise ValueError("Empty batch after filtering")
+
+    inputs, targets, indices = zip(*batch)
+
+    inputs = torch.stack(inputs, dim=0)
+    targets = torch.tensor(targets, dtype=torch.long)
+
+    return inputs, targets
+   
 def init_data(
     data_paths,
     batch_size,
@@ -52,7 +63,7 @@ def init_data(
     num_workers=8,
     pin_mem=True,
     persistent_workers=True,
-    log_dir=None,
+    log_dir="/content/drive/MyDrive/data",
 ):
     dataset = VideoDataset(
         data_paths=data_paths,
@@ -95,7 +106,7 @@ def init_data(
 
     data_loader = torch.utils.data.DataLoader(
             dataset,
-            collate_fn=collator,
+            collate_fn=collate_fn,
             sampler=dist_sampler,
             batch_size=batch_size,
             drop_last=drop_last,
@@ -281,13 +292,10 @@ class VideoDataset(torch.utils.data.Dataset):
         # Expanding the input image [3, H, W] ==> [T, 3, H, W]
         buffer = image_tensor.unsqueeze(dim=0).repeat((fpc, 1, 1, 1))
         buffer = buffer.permute((0, 2, 3, 1))  # [T, 3, H, W] ==> [T H W 3]
-        
-        
         # Apply motion to create fake video clip
         buffer = self.motion_aug.apply_motion(buffer, clip_index=index)
         if self.transform:
-            buffer = [self._thermal_aug(buffer=buffer, is_shared=False)]
-
+            buffer = self._thermal_aug(buffer=buffer, is_shared=False)
         return buffer, label, clip_indices
 
     def loadvideo_decord(self, sample, fpc):

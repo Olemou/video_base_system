@@ -82,7 +82,7 @@ def get_all_sheets(config):
     return [str(p) for p in paths]
 
 def get_base_path(config) -> Path:
-    return Path(config.get("data_root", "")).expanduser().resolve()
+    return Path(config.get("data_root", "")).expanduser().resolve().parent
 import re
 
 def expand(pattern:str ="Image[1-3]") -> List[str]:

@@ -4,8 +4,9 @@
 import torch
 import math
 import torch.nn as nn
-from app.rotation_embedding_2d import RotaryEmbedding2D, apply_rotary_2d  
-from src.src_utils.vision_config import VisionConfig  
+from app.rotation_embedding_2d import RotaryEmbedding2D, apply_rotary_2d
+from src.src_utils.vision_config import VisionConfig
+
 
 class SpatialAttention2D(nn.Module):
     def __init__(self, config: VisionConfig, qkv_bias=True, isFilter=False):
@@ -13,12 +14,12 @@ class SpatialAttention2D(nn.Module):
         self.isFilter = isFilter
         if self.isFilter:
             self.num_heads = config.number_heads_spatial_kalman_attn
+            self.dim = config.kalman_filter_embedding
         else:
             self.num_heads = config.num_heads_spatial_attn
-            
-        assert config.embed_dim % self.num_heads == 0
-        self.dim = config.embed_dim
-        self.head_dim = config.embed_dim // self.num_heads
+            self.dim = config.embed_dim
+        assert self.dim % self.num_heads == 0
+        self.head_dim = self.dim // self.num_heads
 
         self.norm = nn.LayerNorm(self.dim)
         self.qkv = nn.Linear(self.dim, self.dim * 3, bias=qkv_bias)
@@ -50,7 +51,7 @@ class SpatialAttention2D(nn.Module):
         q, k = apply_rotary_2d(q, k, cos, sin)
 
         attn = (q @ k.transpose(-2, -1)) * (self.head_dim ** -0.5)
-        attn = attn.softmax(dim=-1) 
+        attn = attn.softmax(dim=-1)
         out = attn @ v
         out = out.transpose(1, 2).reshape(B*T, N, C)
 

@@ -1,3 +1,12 @@
+from src.src_utils.utils import trunc_normal_
+from src.src_utils.vision_config import VisionConfig
+from app.spatial_temporal_attention import RoPEAttention
+from app.gru_customized import TemporalSpatialStateGRU
+from app.patch_embedding import PatchEmbedding3D, PatchMerging
+from app.tokenlearner import TokenLearner
+from app.vision_temporal_attention import VisionTemporalAttention
+from app.spation_attention_2d import SpatialAttention2D
+from app.kalman_former_net import KalmanFormerNet
 import math
 import torch
 import torch.nn as nn
@@ -5,21 +14,11 @@ import os
 import torch.nn.functional as F
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from app.kalman_former_net import KalmanFormerNet
-from  app.spation_attention_2d import SpatialAttention2D
-from  app.vision_temporal_attention import VisionTemporalAttention
-from  app.tokenlearner import TokenLearner
-from app.patch_embedding import PatchEmbedding3D, PatchMerging
-from  app.gru_customized import TemporalSpatialStateGRU
-from app.spatial_temporal_attention import RoPEAttention
-from src.src_utils.vision_config import VisionConfig
-from src.src_utils.utils import trunc_normal_
 
-   
+
 class AttentionBlock(nn.Module):
-    def __init__(self, config, qkv_bias=True,return_attn=True):
+    def __init__(self, config, qkv_bias=True, return_attn=True):
         super().__init__()
-
 
         self.norm_spatial = nn.LayerNorm(config.embed_dim)
         self.norm_temporal = nn.LayerNorm(config.embed_dim)
@@ -38,9 +37,10 @@ class AttentionBlock(nn.Module):
         self.patchmerging = PatchMerging(config)
         self.gru = TemporalSpatialStateGRU(config)
         self.spatial_temporal_attn = RoPEAttention(config, qkv_bias=qkv_bias)
-        self.attn_weight = None 
+        self.attn_weight = None
 
-        self.mlp = MLP(config.embed_dim, config.mlp_dim, config.embed_dim, drop=config.dropout)
+        self.mlp = MLP(config.embed_dim, config.mlp_dim,
+                       config.embed_dim, drop=config.dropout)
 
     def forward(self, x, block_index=0):
 
@@ -54,7 +54,7 @@ class AttentionBlock(nn.Module):
         # =========================
         if block_index == 0:
             x = self.patchmerging(x)
-        
+
         # =========================
         # 3. Kalman branch (residual style)
         # =========================
@@ -71,27 +71,27 @@ class AttentionBlock(nn.Module):
         # =========================
         # 5. GRU fusion (residual)
         # =========================
-        x_gru, _ = self.gru(self.norm_gru(x), x)
+        x_gru = self.gru(self.norm_gru(x), x)
         x = x + self.dropout(x_gru)
-        
+
         # spatial_temporal_attention_heads = 8
         B, T, N, C = x.shape
         x = x.view(B, T * N, C)  # [B, T*N, C]
-                  
-        tuple_out = self.spatial_temporal_attn(x = self.norm_spatial_temporal(x),return_attn=self.return_attn, T= T, H_patches= int(math.sqrt(N)), W_patches= int(math.sqrt(N)))
-        
-        
+
+        tuple_out = self.spatial_temporal_attn(x=self.norm_spatial_temporal(
+            x), return_attn=self.return_attn, T=T, H_patches=int(math.sqrt(N)), W_patches=int(math.sqrt(N)))
+
         spatial_temporal_output, self.attn_weight = tuple_out
         x = x + self.dropout(spatial_temporal_output)
-        
+
         # =========================
-        # 6. MLP 
+        # 6. MLP
         # =========================
         x = x + self.dropout(self.mlp(self.norm_mlp(x)))
         x = x.reshape(B, T, N, C)
         return x
-    
-   
+
+
 class MLP(nn.Module):
     def __init__(
         self,
@@ -116,16 +116,17 @@ class MLP(nn.Module):
         x = self.fc2(x)
         x = self.drop(x)
         return x
-    
+
+
 class ProjectionHead(nn.Module):
     def __init__(self, config: VisionConfig):
         super().__init__()
-        self.projection  = nn.Sequential(
-                nn.Linear(config.embed_dim, config.embed_dim),
-                nn.GELU(),
-                nn.Linear(config.embed_dim, config.projection_dim)
-            )
-                    
+        self.projection = nn.Sequential(
+            nn.Linear(config.embed_dim, config.embed_dim),
+            nn.GELU(),
+            nn.Linear(config.embed_dim, config.projection_dim)
+        )
+
         nn.Linear(config.embed_dim, config.projection_dim)
 
     def forward(self, x):
@@ -136,23 +137,24 @@ class ProjectionHead(nn.Module):
         x = x.view(B, N, -1)   # [B, N, projection_dim]
         x = F.normalize(x, dim=-1)
         return x
-    
+
+
 class KalmanFormerNetVideoModel(nn.Module):
     def __init__(self, config: VisionConfig,
                  qkv_bias=True, return_attn=False, init_type="xavier_uniform", init_std=0.02):
         super().__init__()
         self.patch_embedding = PatchEmbedding3D(config)
-        self.head = ProjectionHead(config)  
+        self.head = ProjectionHead(config)
         self.attn_layers = nn.ModuleList(
             [AttentionBlock(
-                config = config,
-            qkv_bias=qkv_bias, return_attn=return_attn
-        ) for _ in range(config.depth)]
+                config=config,
+                qkv_bias=qkv_bias, return_attn=return_attn
+            ) for _ in range(config.depth)]
         )
         self.init_type = init_type
         self.init_std = init_std
         self.apply(self._init_weights)
-        
+
     def _init_weights(self, m):
         if isinstance(m, nn.LayerNorm):
             nn.init.constant_(m.bias, 0)
@@ -200,11 +202,11 @@ class KalmanFormerNetVideoModel(nn.Module):
         for index, block in enumerate(self.attn_layers):
             x = block(x, index)
         weights = torch.softmax(x.mean(dim=-1).mean(dim=-1), dim=1)  # [B, T]
-        print("weights.shape:", weights.shape)
         z_t = torch.einsum('btnd,bt->bnd', x, weights)          # [B, N, D]
         out = self.head(z_t)  # [B, N, projection_dim]
         return out
-    
+
+
 # Choose device
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -216,10 +218,10 @@ model = KalmanFormerNetVideoModel(config, device).to(device)
 if __name__ == "__main__":
     # Example video tensor: [B, C, T, H, W]
     dummy_video = torch.randn(2, 3, 4, 224, 224).to(device)
-    
+
     # Forward pass
     output = model(dummy_video)
-    
+
     attn = model.attn_layers[0].attn_weight
     if attn is not None:
         print("Attention weights shape:", attn.shape)
