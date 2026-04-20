@@ -322,7 +322,7 @@ def main(
     which_dtype = args.which_dtype
     batch_size = args.global_batch_size // args.world_size
     world_size = args.world_size
-    lr = args.learning_rate * (args.global_batch_size / 4096)  # scale LR by global batch size
+    lr = args.learning_rate * (args.global_batch_size / 512)  # scale LR by global batch size
     loss_reg_std_mult = args.loss_reg_std_mult
     loss_reg_min_epoch  = args.loss_reg_min_epoch
     loss_reg_num_tracking_steps = args.loss_reg_num_tracking_steps
@@ -577,40 +577,40 @@ def main(
                         )
             
         #===================================================================================== # -- Logging
-        def log_stats():
-                csv_logger.log(
-                    epoch + 1,
-                    itr,
-                    loss,
-                    gpu_etime_ms,
-                    data_elapsed_time_ms,
-                )
-                if (
-                    (itr % log_freq == 0)
-                    or (itr == itr - 1)
-                    or np.isnan(loss)
-                    or np.isinf(loss)
-                    ):
-                    logger.info(
-                        "[%d, %5d] loss: %.3f "
-                        "[wd: %.2e] [lr: %.2e] "
-                        "[mem: %.2f MB] "
-                        "[iter: %.1f ms] "
-                        "[gpu: %.1f ms] "
-                        "[data: %.1f ms]"
-                        % (
-                            epoch + 1,
-                            itr,
-                            loss_meter.avg,
-                            optimizer.param_groups[0]["weight_decay"],
-                            optimizer.param_groups[0]["lr"],
-                            torch.cuda.max_memory_allocated() / 1024.0**2,
-                            iter_time_meter.avg,
-                            gpu_time_meter.avg,
-                            data_elapsed_time_meter.avg,
-                        )
+            def log_stats():
+                    csv_logger.log(
+                        epoch + 1,
+                        itr,
+                        loss,
+                        gpu_etime_ms,
+                        data_elapsed_time_ms,
                     )
-        log_stats() 
+                    if (
+                        (itr % log_freq == 0)
+                        or (itr == itr - 1)
+                        or np.isnan(loss)
+                        or np.isinf(loss)
+                        ):
+                        logger.info(
+                            "[%d, %5d] loss: %.3f "
+                            "[wd: %.2e] [lr: %.2e] "
+                            "[mem: %.2f MB] "
+                            "[iter: %.1f ms] "
+                            "[gpu: %.1f ms] "
+                            "[data: %.1f ms]"
+                            % (
+                                epoch + 1,
+                                itr,
+                                loss_meter.avg,
+                                optimizer.param_groups[0]["weight_decay"],
+                                optimizer.param_groups[0]["lr"],
+                                torch.cuda.max_memory_allocated() / 1024.0**2,
+                                iter_time_meter.avg,
+                                gpu_time_meter.avg,
+                                data_elapsed_time_meter.avg,
+                            )
+                        )
+            log_stats()  
         #=====================================================================================================
            # -- Save Checkpoint 
         logger.info("avg. loss %.3f" % loss_meter.avg)
@@ -647,27 +647,28 @@ def main(
                 return loss_eval.detach().item()
             loss_val = validation_forward_step()
             val_loss_meter.update(loss_val, n=input_vals.size(0))
-        def log_stats_eval():
-                csv_logger_eval.log(
-                    epoch + 1,
-                    itr,
-                    loss,
-                )
-                if (
-                    (itr % log_freq == 0)
-                    or (itr == itr - 1)
-                    or np.isnan(loss)
-                    or np.isinf(loss)
-                    ):
-                    logger.info(
-                        "[%d, %5d] loss: %.3f "
-                        % (
-                            epoch + 1,
-                            itr,
-                            loss_meter.avg,
-                        )
+            def log_stats_eval():
+                    csv_logger_eval.log(
+                        epoch + 1,
+                        itr,
+                        loss,
                     )
-        log_stats_eval()
+                    if (
+                        (val_iter % log_freq == 0)
+                        or (itr == itr - 1)
+                        or np.isnan(loss)
+                        or np.isinf(loss)
+                        ):
+                        logger.info(
+                            "[%d, %5d] loss: %.3f "
+                            % (
+                                epoch + 1,
+                                itr,
+                                loss_meter.avg,
+                            )
+                        )
+            log_stats_eval()
+            logger.info("End of validation process.....")
         model.train()
         if sync_gc:
             gc.enable()
