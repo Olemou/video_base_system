@@ -85,39 +85,72 @@ def init_data(
         shared_transform=shared_transform,
         transform=transform,
     )
+    
+    dataset_size = len(dataset)
+    train_size = int(0.9 * dataset_size)
+    val_size = dataset_size - train_size
+    rain_dataset, val_dataset = torch.utils.data.random_split(
+        dataset,
+        [train_size, val_size],
+        generator=torch.Generator().manual_seed(42)  # reproducible
+    )
 
     log_dir = pathlib.Path(log_dir) if log_dir else None
     if log_dir:
-        log_dir.mkdir(parents=True, exist_ok=True)
-        # Worker ID will replace '%w'
-        resource_log_filename = log_dir / f"resource_file_{rank}_%w.csv"
-        dataset = MonitoredDataset(
-            dataset=dataset,
-            log_filename=str(resource_log_filename),
-            log_interval=10.0,
-            monitor_interval=5.0,
-        )
+            log_dir.mkdir(parents=True, exist_ok=True)
+            train_dataset = MonitoredDataset(
+                dataset=train_dataset,
+                log_filename=str(log_dir / f"train_resource_{rank}_%w.csv"),
+                log_interval=10.0,
+                monitor_interval=5.0,
+            )
+
+            val_dataset = MonitoredDataset(
+                dataset=val_dataset,
+                log_filename=str(log_dir / f"val_resource_{rank}_%w.csv"),
+                log_interval=10.0,
+                monitor_interval=5.0,
+            )
 
     logger.info("VideoDataset dataset created")
-    
-    dist_sampler = torch.utils.data.distributed.DistributedSampler(
-            dataset, num_replicas=world_size, rank=rank, shuffle=True
-        )
-    
+    train_sampler = torch.utils.data.distributed.DistributedSampler(
+        train_dataset,
+        num_replicas=world_size,
+        rank=rank,
+        shuffle=True
+    )
 
-    data_loader = torch.utils.data.DataLoader(
-            dataset,
-            collate_fn=collate_fn,
-            sampler=dist_sampler,
-            batch_size=batch_size,
-            drop_last=drop_last,
-            pin_memory=pin_mem,
-            num_workers=num_workers,
-            persistent_workers=(num_workers > 0) and persistent_workers,
+    val_sampler = torch.utils.data.distributed.DistributedSampler(
+            val_dataset,
+            num_replicas=world_size,
+            rank=rank,
+            shuffle=False
         )
-    logger.info("VideoDataset unsupervised data loader created")
+            
+    train_loader = torch.utils.data.DataLoader(
+    train_dataset,
+    collate_fn=collate_fn,
+    sampler=train_sampler,
+    batch_size=batch_size,
+    drop_last=drop_last,
+    pin_memory=pin_mem,
+    num_workers=num_workers,
+    persistent_workers=(num_workers > 0) and persistent_workers,
+)
 
-    return data_loader, dist_sampler
+    val_loader = torch.utils.data.DataLoader(
+        val_dataset,
+        collate_fn=collate_fn,
+        sampler=val_sampler,
+        batch_size=batch_size,
+        drop_last=False,  # usually False for validation
+        pin_memory=pin_mem,
+        num_workers=num_workers,
+        persistent_workers=(num_workers > 0) and persistent_workers,
+    )
+    logger.info("VideoDataset  data loader created")
+
+    return  train_loader, val_loader, train_sampler, val_sampler
 
 
 class VideoDataset(torch.utils.data.Dataset):

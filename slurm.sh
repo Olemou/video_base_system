@@ -141,7 +141,7 @@ echo "Virtual Env: $VENV_PATH"
 echo "=========================================="
 
 # Shared paths
-DATA_ROOT="~/data"  # CHANGE THIS
+EVAL_DIR="~/shared/eval_dir"  # CHANGE THIS
 CHECKPOINT_DIR="~shared/checkpoints/$SLURM_JOB_ID"
 INTERPRETER_DIR="~shared/logfiles/$SLURM_JOB_ID"
 MONITORING_DIR="~shared/monitoring/$SLURM_JOB_ID"
@@ -151,9 +151,11 @@ if [ $SLURM_NODEID -eq 0 ]; then
     mkdir -p $CHECKPOINT_DIR
     mkdir -p $INTERPRETER_DIR
     mkdir -p $MONITORING_DIR
+    mkdir -p $EVAL_DIR
     echo "📁 Master node created: $CHECKPOINT_DIR"
     echo "📁 Master node created: $INTERPRETER_DIR"
     echo "📁 Master node created: $MONITORING_DIR"
+    echo  "📁 Master node created: $EVAL_DIR"
 fi
 sleep 5
 
@@ -175,8 +177,8 @@ torchrun \
     --master_port=$master_port \
     train.py \
     --is_distributed \
-    --data_root $DATA_ROOT \
-    --monitoring_dirdir $OUTPUT_DIR \
+    --eval_dir $EVAL_DIR \
+    --monitoring_dirdir $MONITORING_DIR \
     --checkpoint_dir $CHECKPOINT_DIR \
     --interpreter_dir $INTERPRETER_DIR \
     --batch_size  \

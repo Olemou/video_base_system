@@ -126,10 +126,10 @@ def parse_arguments():
 
     # Model and data
     
-    parser.add_argument("--data_root", type=str, default="~/data",
+    parser.add_argument("--eval_dir", type=str, default="/content/drive/MyDrive/data",
                         help="Root directory for dataset (must be accessible from all nodes)")
     
-    parser.add_argument("--monitoring_dir", type=str,
+    parser.add_argument("--monitoring_dir", type=str, default="/content/drive/MyDrive/data",
                         help="Output directory for checkpoints (shared across nodes)")
     
     parser.add_argument("--checkpoint_dir", type=str, default="",
@@ -342,7 +342,7 @@ def main(
     #==========================================================================================
     config_path = load_config(path_config)
     
-    dataloader, sampler = init_data(
+    train_loader, val_loader, train_sampler, val_sampler = init_data(
     data_paths = get_path_sheets(config_path),
     batch_size=args.batch_size,
     num_workers=args.num_workers,
@@ -351,7 +351,7 @@ def main(
     rank=rank,  
     log_dir=monitoring_dir
 ) 
-    steps_per_epoch = len(dataloader) 
+    steps_per_epoch = len(train_loader) 
   #=========================================================
      #Intialization of model encoder
     #============  ================================================================
@@ -373,6 +373,7 @@ def main(
     iter_time_meter = AverageMeter()
     gpu_time_meter = AverageMeter()
     data_elapsed_time_meter = AverageMeter()
+    val_loss_meter = AverageMeter()
     #===============================================================================================
     log_freq = 10
     CHECKPOINT_FREQ = 1
@@ -382,7 +383,8 @@ def main(
     log_file = os.path.join(folder, f"log_r{rank}.csv")
     latest_file = "latest.pth.tar"
     latest_path = os.path.join(folder, latest_file)
-    #================================================================================
+    eval_log_file = os.path.join(args.eval_dir,f"log_eval{rank}.csv")
+    #==============================================================================
    # -- make csv_logger
     csv_logger = CSVLogger(
         log_file,
@@ -392,8 +394,15 @@ def main(
         ("%d", "gpu-time(ms)"),
         ("%d", "dataload-time(ms)"),
     )
-
-    data_iter = DataIterator(dataloader, sampler=sampler)
+    csv_logger_eval = CSVLogger(
+        eval_log_file,
+        ("%d", "epoch"),
+        ("%d", "itr"),
+        ("%.5f", "loss"),
+    )
+#================================Iterator====================================================
+    data_iter = DataIterator(train_loader, sampler=train_sampler)
+    data_iter_val = DataIterator(val_loader,val_sampler)
     
     #===============================================================================================
     logger.info(f"{which_dtype=}")
@@ -435,6 +444,7 @@ def main(
         loss_meter.reset()
         iter_time_meter.reset()
         gpu_time_meter.reset()
+        val_loss_meter.reset()
         #====================================================================
         #y cosine schedule at each epoch start
         cosine_schedule(epoch, optimizer, args.warmup_epochs, args.num_epochs, min_lr=1e-6)
@@ -472,7 +482,6 @@ def main(
             if isinstance(batch, (list, tuple)):
                 inputs, targets = batch
                 inputs, targets = inputs.to(args.device), targets.to(args.device)
-                print(inputs.shape)
             else:
                 inputs = batch.to(args.device)
                 targets = None
@@ -566,8 +575,9 @@ def main(
                         raise RuntimeError(
                             "Loss is above bound for too many tries. Exiting."
                         )
-            #===================================================================================== # -- Logging
-            def log_stats():
+            
+        #===================================================================================== # -- Logging
+        def log_stats():
                 csv_logger.log(
                     epoch + 1,
                     itr,
@@ -600,10 +610,9 @@ def main(
                             data_elapsed_time_meter.avg,
                         )
                     )
-            log_stats() 
-            #=====================================================================================================
-            
-         # -- Save Checkpoint
+        log_stats() 
+        #=====================================================================================================
+           # -- Save Checkpoint 
         logger.info("avg. loss %.3f" % loss_meter.avg)
         if (epoch + 1) % CHECKPOINT_FREQ == 0 or epoch == (args.num_epochs - 1):
             save_checkpoint(epoch + 1, latest_path)
@@ -612,5 +621,55 @@ def main(
                 save_every_path = os.path.join(check_point_folder, save_every_file)
                 save_checkpoint(epoch + 1, save_every_path)
 
+        logger.info("Begining of Validation Process")
+        model.eval()
+        steps_val_epoch = len(val_loader)
+        for val_iter in range(steps_val_epoch):
+            batch_val = data_iter_val.next(epoch)
+            if isinstance(batch_val, (list, tuple)):
+                input_vals, target_vals = batch_val
+                input_vals, target_vals = input_vals.to(args.device), target_vals.to(args.device)
+            else:
+                input_vals = batch_val.to(args.device)
+                target_vals = None
+            if sync_gc and (val_iter + 1) % GARBAGE_COLLECT_ITR_FREQ == 0:
+                logger.info("Running garbage collection oin validation process...")
+                gc.collect()
+            def validation_forward_step():
+                with torch.no_grad():
+                    with torch.amp.autocast(
+                        dtype=dtype,
+                        enabled=mixed_precision,
+                        device_type=args.device.type
+                    ):
+                        output_val = model(input_vals)
+                        loss_eval = criterion(output_val, target_vals, epoch)
+                return loss_eval.detach().item()
+            loss_val = validation_forward_step()
+            val_loss_meter.update(loss_val, n=input_vals.size(0))
+        def log_stats_eval():
+                csv_logger_eval.log(
+                    epoch + 1,
+                    itr,
+                    loss,
+                )
+                if (
+                    (itr % log_freq == 0)
+                    or (itr == itr - 1)
+                    or np.isnan(loss)
+                    or np.isinf(loss)
+                    ):
+                    logger.info(
+                        "[%d, %5d] loss: %.3f "
+                        % (
+                            epoch + 1,
+                            itr,
+                            loss_meter.avg,
+                        )
+                    )
+        log_stats_eval()
+        model.train()
         if sync_gc:
             gc.enable()
+                
+            
