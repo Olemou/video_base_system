@@ -144,16 +144,16 @@ echo "=========================================="
 DATA_ROOT="~/data"  # CHANGE THIS
 CHECKPOINT_DIR="~shared/checkpoints/$SLURM_JOB_ID"
 INTERPRETER_DIR="~shared/logfiles/$SLURM_JOB_ID"
-OUTPUT_DIR="~shared/output/$SLURM_JOB_ID"
+MONITORING_DIR="~shared/monitoring/$SLURM_JOB_ID"
 
 # Master node creates directories
 if [ $SLURM_NODEID -eq 0 ]; then
     mkdir -p $CHECKPOINT_DIR
     mkdir -p $INTERPRETER_DIR
-    mkdir -p $OUTPUT_DIR
+    mkdir -p $MONITORING_DIR
     echo "📁 Master node created: $CHECKPOINT_DIR"
     echo "📁 Master node created: $INTERPRETER_DIR"
-    echo "📁 Master node created: $OUTPUT_DIR"
+    echo "📁 Master node created: $MONITORING_DIR"
 fi
 sleep 5
 
@@ -176,10 +176,10 @@ torchrun \
     train.py \
     --is_distributed \
     --data_root $DATA_ROOT \
-    --output_dir $OUTPUT_DIR \
+    --monitoring_dirdir $OUTPUT_DIR \
     --checkpoint_dir $CHECKPOINT_DIR \
     --interpreter_dir $INTERPRETER_DIR \
-    --batch_size 512 \
+    --batch_size  \
     --num_epochs 100
 EOF
 
