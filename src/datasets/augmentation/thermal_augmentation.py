@@ -217,8 +217,12 @@ class ThermalAugmentor:
 
             if torch.rand(1).item() < self.cfg.elastic_transform_prob:
                 buffers = self._elastic_transform(buffers)
+                buffers = self._elastic_transform(buffers)
                 
             if torch.rand(1).item() < self.cfg.horizontal_flip_prob:
+                buffers = self._horizontal_flip(buffers)
+          
+            return buffers
                 buffers = self._horizontal_flip(buffers)
           
             return buffers

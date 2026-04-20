@@ -12,6 +12,7 @@ from src.src_utils.logging import gpu_timer, CSVLogger
 from src.src_utils.utils import AverageMeter
 from src.loss_fn.loss import UncertaintyAwareLoss
 import gc
+import warnings
 import numpy as np
 import torch
 import torch.nn as nn
@@ -521,7 +522,7 @@ def main(
                 
                 # Step 2. Backward & step
                 run_step = True
-                if loss_reg_std_mult is not None and len(trailing_losses):
+                if loss_reg_std_mult is not None and len(trailing_losses) > 0 :
                     meanval = np.mean(trailing_losses)
                     stdval = np.std(trailing_losses)
                     max_bound = meanval + loss_reg_std_mult * stdval

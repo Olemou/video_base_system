@@ -103,6 +103,7 @@ def init_data(
     dist_sampler = torch.utils.data.distributed.DistributedSampler(
             dataset, num_replicas=world_size, rank=rank, shuffle=True
         )
+    
 
     data_loader = torch.utils.data.DataLoader(
             dataset,
