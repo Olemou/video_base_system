@@ -67,11 +67,11 @@ def rename_and_create_csv(
 
 # Usage
 if __name__ == "__main__":
-    path = r"C:\Users\efo6780\Downloads\liquid-20260418T192810Z-3-001\datasets\folderImage82"
+    path = r"C:\Users\efo6780\Documents\folderImage81"
 
     rename_and_create_csv(
         image_folder=path,
-        output_csv="folder_images_82.csv",
+        output_csv="folder_images_81.csv",
         prefix="no_spill",
-        excelfileName="datasets/folderImage82/no_spill"
+        excelfileName="datasets/folderImage81/no_spill"
     )
