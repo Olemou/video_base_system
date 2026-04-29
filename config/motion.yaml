@@ -1,0 +1,13 @@
+motion_intensity_ranges:
+  micro:
+    x: 5
+    y: 5
+  small:
+    x: 15
+    y: 15
+  medium:
+    x: 30
+    y: 25
+  large:
+    x: 60
+    y: 50
