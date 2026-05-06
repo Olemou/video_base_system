@@ -2,12 +2,12 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from src.loss_fn.utils import compute_lambda,CoClusterOpinionLoss
+from src.loss_fn.utils import compute_lambda,CoCluster
 
 class UncertaintyAwareLoss(nn.Module):
     def __init__(self, prior_weight=0.5, TotalEpochs: int = 100, temperature: float = 0.1):
         super().__init__()
-        self.co_cluster_loss = CoClusterOpinionLoss(prior_weight)
+        self.co_cluster_loss = CoCluster(prior_weight)
         self.TotalEpochs = TotalEpochs
         self.temperature = temperature
 
