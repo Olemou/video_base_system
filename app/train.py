@@ -10,7 +10,7 @@ from app.utils import  cosine_schedule, set_lr_para, create_optimizer
 import os
 from src.src_utils.logging import gpu_timer, CSVLogger
 from src.src_utils.utils import AverageMeter
-from src.loss_fn.loss import UncertaintyAwareLoss
+from src.loss_fn.loss import KolmanAdptiveContrastiveLoss
 import gc
 import warnings
 import numpy as np
@@ -391,7 +391,7 @@ def main(
     #================================================================================================
     
     #============================== Loss Initialisation here ===============================================  
-    criterion = UncertaintyAwareLoss(prior_weight=0.5, TotalEpochs=args.num_epochs, temperature=0.1)    
+    criterion = KolmanAdptiveContrastiveLoss(prior_weight=0.5, TotalEpochs=args.num_epochs, temperature=0.1)    
     # =============================================================================
     
     #==================================================optimizer===================================
@@ -499,7 +499,7 @@ def main(
             def train_forward_step():
                 with torch.amp.autocast(dtype=dtype, enabled=mixed_precision,device_type=args.device.type):
                     outputs = model(inputs)
-                loss = criterion(outputs, targets, epoch) 
+                loss = criterion(outputs, targets) 
                 
                 # Step 2. Backward & step
                 run_step = True
