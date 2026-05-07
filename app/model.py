@@ -127,14 +127,12 @@ class ProjectionHead(nn.Module):
             nn.Linear(config.embed_dim, config.projection_dim)
         )
 
-        nn.Linear(config.embed_dim, config.projection_dim)
-
     def forward(self, x):
         # x: # [B, N, D]
-        B, N, D = x.shape
-        x = x.view(B * N, D)  # [B*N, D]
+        B, N, D , T= x.shape
+        x = x.view(B * N * T, D)  # [B*N, D]
         x = self.projection(x)     # [B*N, projection_dim]
-        x = x.view(B, N, -1)   # [B, N, projection_dim]
+        x = x.view(B, N, T, -1)   # [B, N, projection_dim]
         x = F.normalize(x, dim=-1)
         return x
 
@@ -201,30 +199,8 @@ class KalmanFormerNetVideoModel(nn.Module):
         # Attention block
         for index, block in enumerate(self.attn_layers):
             x = block(x, index)
-        weights = torch.softmax(x.mean(dim=-1).mean(dim=-1), dim=1)  # [B, T]
-        z_t = torch.einsum('btnd,bt->bnd', x, weights)          # [B, N, D]
-        out = self.head(z_t)  # [B, N, projection_dim]
+        # [B, N, D]
+        out = self.head( x)  # [B, N, projection_dim]
         return out
 
 
-# Choose device
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# Instantiate the model
-config = VisionConfig()
-model = KalmanFormerNetVideoModel(config, device).to(device)
-
-# Optional: test with dummy input
-if __name__ == "__main__":
-    # Example video tensor: [B, C, T, H, W]
-    dummy_video = torch.randn(2, 3, 4, 224, 224).to(device)
-
-    # Forward pass
-    output = model(dummy_video)
-
-    attn = model.attn_layers[0].attn_weight
-    if attn is not None:
-        print("Attention weights shape:", attn.shape)
-    print("output.shape:", output.shape)
-    total_params = sum(p.numel() for p in model.parameters())
-    print(f"Total parameters: {total_params}")

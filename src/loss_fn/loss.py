@@ -2,15 +2,16 @@ import torch
 import torch.nn.functional as F
 from src.loss_fn.koopman import koopman 
 from src.loss_fn.utils import CoCluster
+import torch.nn as nn
 
-class KolmanAdptiveContrastiveLoss:
+class KolmanAdptiveContrastiveLoss(nn.Module):
     def __init__(self, prior_weight=0.5, TotalEpochs: int = 100, temperature: float = 0.1):
         super().__init__()
         self.co_cluster_loss = CoCluster(prior_weight)
         self.TotalEpochs = TotalEpochs
         self.temperature = temperature
         
-    def weighted(u: torch.Tensor):
+    def weighted(self, u: torch.Tensor):
         weight = 1 + torch.exp(-u)
         return weight
 
@@ -30,7 +31,7 @@ class KolmanAdptiveContrastiveLoss:
         x_temp = torch.einsum("btnd,bdk->btnk", x, K_temp)
 
         # semantic gating
-        g_sem_uncertainity = self.co_cluster_loss(x_mean = x.mean(dim=(1, 2)))
+        g_sem_uncertainity = self.co_cluster_loss(x.mean(dim=(1, 2)))
         g_sem = self.weighted(g_sem_uncertainity)
         x_sem = x * g_sem[:, None, None, :]
 
@@ -41,8 +42,6 @@ class KolmanAdptiveContrastiveLoss:
 
         # final representation
         z = x + x_temp + x_inner + x_sem
-        z = F.normalize(z, dim=-1)
-
         # flatten
         z = z.reshape(B * T * N, D)
         M = z.shape[0]

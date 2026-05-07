@@ -1,76 +1,66 @@
-
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class CoCluster(nn.Module):
-    def __init__(self, prior_weight=0.5):
+    def __init__(self, embed_dim: int = 256, prior_weight: float = 0.5):
         super().__init__()
+
+        self.embed_dim = embed_dim
         self.prior_weight = prior_weight
 
     @staticmethod
-    def similarity_to_evidence(sim: torch.Tensor, prior_weight=0.5) -> torch.Tensor:
-        # sim: (B, T, N, N)
-        g_sim = sim
-        g_dsim = 1 - sim
+    def similarity_to_evidence(sim: torch.Tensor, prior_weight: float):
+        e_pos = torch.exp(F.softmax(sim, dim=-1))
+        e_neg = torch.exp(F.softmax(1.0 - sim, dim=-1))
+        total = e_pos + e_neg + prior_weight
+        return prior_weight / total
 
-        e_pos = torch.exp(F.softmax(g_sim, dim=-1))
-        e_neg = torch.exp(F.softmax(g_dsim, dim=-1))
+    def forward(self, z: torch.Tensor):
 
-        total_mass = e_pos + e_neg + prior_weight
-        return prior_weight / total_mass
+        # =====================================================
+        # CASE 1: (B, D)
+        # =====================================================
+        if z.dim() == 2:
+            B, D = z.shape
 
-    def forward(self, z: torch.Tensor, labels=None):
-        """
-        Supports:
-        Case 1: (B, T, N, D)  -> video batch
-        Case 2: (N, D)        -> single frame / token set
-        """
+            if D != self.embed_dim:
+                raise ValueError(f"Expected {self.embed_dim}, got {D}")
+            sim = torch.einsum('bd,be->bde', z, z)
 
-        # -----------------------------
-        # Case 1: Video batch
-        # -----------------------------
-        if z.dim() == 4:
+            # remove diagonal per sample
+            eye = torch.eye(D, device=z.device).unsqueeze(0)
+            sim = sim.masked_fill(eye.bool(), 0.0)
+
+            uncertainty = self.similarity_to_evidence(sim, self.prior_weight)
+
+            # keep per-feature uncertainty
+            uncertainty = uncertainty.mean(dim=-1)  # (B, D)
+
+            return uncertainty
+
+        # =====================================================
+        # CASE 2: (B, T, N, D)
+        # =====================================================
+        elif z.dim() == 4:
             B, T, N, D = z.shape
 
-            # verify transpose compatibility
-            if z.shape[-1] != D:
-                raise ValueError("Invalid last dimension before transpose.")
+            if D != self.embed_dim:
+                raise ValueError(f"Expected {self.embed_dim}, got {D}")
 
-            sim = torch.matmul(z, z.transpose(-1, -2))
+            sim = z @ z.transpose(-1, -2)  # (B,T,N,N)
 
-            # remove diagonal per frame
-            eye = torch.eye(N, device=z.device).unsqueeze(0).unsqueeze(0)
-            sim = sim * (1 - eye)
+            eye = torch.eye(N, device=z.device).view(1, 1, N, N)
+            sim = sim.masked_fill(eye.bool(), 0.0)
 
-        # -----------------------------
-        # Case 2: Single frame
-        # -----------------------------
-        elif z.dim() == 2:
-            N, D = z.shape
+            uncertainty = self.similarity_to_evidence(sim, self.prior_weight)
 
-            if z.shape[-1] != D:
-                raise ValueError("Invalid last dimension before transpose.")
-
-            sim = torch.matmul(z, z.t())
-
-            # remove diagonal
-            eye = torch.eye(N, device=z.device)
-            sim = sim * (1 - eye)
+            return uncertainty
 
         else:
-            raise ValueError(
-                f"Expected z to be 2D or 4D (N,D) or (B,T,N,D), got {tuple(z.shape)}"
-            )
+            raise ValueError(f"Expected (B,D) or (B,T,N,D), got {tuple(z.shape)}")
 
-        # Convert similarity to uncertainty
-        uncertainty = self.similarity_to_evidence(sim, self.prior_weight)
-        return uncertainty
-    
-    
-    
 def compute_lambda(uncertainty: torch.Tensor, epoch: int, TotalEpochs: int):
     """
     uncertainty: (..., M)
@@ -97,5 +87,3 @@ def compute_lambda(uncertainty: torch.Tensor, epoch: int, TotalEpochs: int):
     Lambda = 1 + torch.exp(-delta_t * phi_rho)
 
     return Lambda
-
-
