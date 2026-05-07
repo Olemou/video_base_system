@@ -615,7 +615,7 @@ def main(
                         device_type=args.device.type
                     ):
                         output_val = model(input_vals)
-                        loss_eval = criterion(output_val, target_vals, epoch)
+                        loss_eval = criterion(output_val, target_vals)
                 return loss_eval.detach().item()
             loss_val = validation_forward_step()
             val_loss_meter.update(loss_val, n=input_vals.size(0))
